@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvacuAI —My Profile</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+ .page-wrap { max-width:480px; margin:40px auto; padding:0 20px; }
+ .profile-avatar { width:64px; height:64px; border-radius:50%; background:var(--green-mid); display:flex; align-items:center; justify-content:center; font-size:28px; color:#fff; margin:0 auto 16px; }
+ .profile-info { text-align:center; margin-bottom:24px; }
+ .profile-info h2 { font-size:22px; font-weight:800; color:var(--text); }
+ .profile-info p { font-size:14px; color:var(--text-muted); margin-top:4px; }
+ #msg { font-size:13px; padding:10px 13px; border-radius:8px; display:none; margin-bottom:12px; }
+ #msg.success { background:var(--green-pale); color:var(--green-dark); }
+ #msg.error { background:var(--red-pale); color:var(--red); }
+</style>
+</head>
+<body>
+<nav class="navbar">
+ <div class="navbar-brand">
+ <div class="navbar-logo"></div>
+ <div><div class="navbar-title">EvacuAI</div><div class="navbar-subtitle">Cebu Evacuation System</div></div>
+ </div>
+ <div class="navbar-links">
+ <a href="{{ '/admin' if role == 'admin' else '/student' }}">← Back</a>
+ {% if role == 'admin' %}
+ <a href="/admin/students"> Students</a>
+ {% endif %}
+ <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
+ </div>
+</nav>
+
+<div class="page-wrap">
+ <div class="card">
+ <div class="profile-avatar"></div>
+ <div class="profile-info">
+ <h2>{{ name }}</h2>
+ <p> ID: <strong>{{ sid }}</strong> &nbsp;·&nbsp; <span class="badge {{ 'badge-admin' if role == 'admin' else 'badge-student' }}">{{ role }}</span></p>
+ </div>
+
+ <hr class="divider">
+
+ <div class="card-title" style="margin-bottom:14px;">Change Password</div>
+ <div id="msg"></div>
+ <div class="form-group">
+ <label>Current password</label>
+ <input type="password" id="cpw-old" placeholder="Your current password">
+ </div>
+ <div class="form-group">
+ <label>New password</label>
+ <input type="password" id="cpw-new" placeholder="At least 6 characters">
+ </div>
+ <div class="form-group">
+ <label>Confirm new password</label>
+ <input type="password" id="cpw-confirm" placeholder="Repeat new password">
+ </div>
+ <button class="btn btn-primary btn-full" onclick="changePassword()"> Save New Password</button>
+ </div>
+</div>
+
+<div id="toast"></div>
+
+<script> function doLogout(){
+ fetch('/api/logout',{method:'POST'}).catch(function(){}).finally(function(){ window.location.href='/logout'; });
+}
+function showMsg(t,type){ var e=document.getElementById('msg'); e.textContent=t; e.className=type; e.style.display='block'; }
+
+function changePassword(){
+ var oldPw = document.getElementById('cpw-old').value;
+ var newPw = document.getElementById('cpw-new').value;
+ var confPw = document.getElementById('cpw-confirm').value;
+ if(!newPw||newPw.length<6){ showMsg('New password must be at least 6 characters.','error'); return; }
+ if(newPw!==confPw){ showMsg('Passwords do not match.','error'); return; }
+ fetch('/api/change-password',{
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body:JSON.stringify({old_password:oldPw, new_password:newPw})
+ }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+ .then(function(res){
+ if(!res.ok){ showMsg(res.d.error,'error'); return; }
+ showMsg('Password changed successfully!','success');
+ document.getElementById('cpw-old').value='';
+ document.getElementById('cpw-new').value='';
+ document.getElementById('cpw-confirm').value='';
+ });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvacuAI — Cebu Evacuation System</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style> body { display:flex; flex-direction:column; min-height:100vh; }
+ .hero-bg { flex:1; background:var(--green-pale); display:flex; align-items:center; justify-content:center; padding:40px 16px; }
+ .auth-card { background:var(--surface); border-radius:14px; box-shadow:0 4px 24px rgba(0,0,0,0.10); padding:36px 32px; width:100%; max-width:420px; }
+ .auth-card h2 { font-size:26px; font-weight:800; color:var(--text); margin-bottom:4px; }
+ .auth-card .subtitle { font-size:14px; color:var(--text-muted); margin-bottom:24px; }
+ #msg { font-size:13px; margin-bottom:12px; padding:10px 13px; border-radius:8px; display:none; }
+ #msg.success { background:var(--green-pale); color:var(--green-dark); }
+ #msg.error { background:var(--red-pale); color:var(--red); }
+ .contact-note { font-size:12px; color:var(--text-muted); margin-top:14px; text-align:center; padding:10px; background:#f9f9f7; border-radius:8px; border:1px solid var(--border); }
+ .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:300; align-items:center; justify-content:center; }
+ .modal-overlay.show { display:flex; }
+ .modal-box { background:#fff; border-radius:14px; padding:32px; width:100%; max-width:380px; box-shadow:0 8px 32px rgba(0,0,0,0.2); }
+ #cpw-msg { display:none; font-size:13px; margin-bottom:10px; padding:9px 12px; border-radius:8px; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+ <div class="navbar-brand">
+ <div class="navbar-logo"></div>
+ <div><div class="navbar-title">EvacuAI</div><div class="navbar-subtitle">Cebu Evacuation System</div></div>
+ </div>
+</nav>
+
+<div class="hero-bg">
+ <div class="auth-card">
+ <div style="text-align:center;font-size:44px;margin-bottom:12px;"></div>
+ <h2>Sign In</h2>
+ <p class="subtitle">Enter your campus Student ID and the password provided by your department.</p>
+ <div id="msg"></div>
+ <div class="form-group">
+ <label>Student ID / Admin ID</label>
+ <input type="text" id="student-id" placeholder="e.g. 2024-00123" style="text-transform:uppercase;">
+ </div>
+ <div class="form-group">
+ <label>Password</label>
+ <input type="password" id="password" placeholder="••••••••">
+ </div>
+ <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()">Sign In</button>
+ <div class="contact-note"> Your Student ID and initial password are provided by your department.<br> If you cannot log in, contact your registrar or safety officer.
+ </div>
+ </div>
+</div>
+
+<!-- Change PW modal -->
+<div class="modal-overlay" id="cpw-modal">
+ <div class="modal-box">
+ <div style="font-size:22px;font-weight:800;color:var(--green-dark);margin-bottom:6px;">Set Your Password</div>
+ <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">You are using a temporary password. Please set a new one before continuing.</p>
+ <div id="cpw-msg"></div>
+ <div class="form-group"><label>Temporary password</label><input type="password" id="cpw-old"></div>
+ <div class="form-group"><label>New password</label><input type="password" id="cpw-new" placeholder="At least 6 characters"></div>
+ <div class="form-group"><label>Confirm new password</label><input type="password" id="cpw-confirm"></div>
+ <button class="btn btn-primary btn-full" onclick="doChangePw()">Save & Continue</button>
+ </div>
+</div>
+
+<script> var pendingRole = null;
+document.getElementById('student-id').addEventListener('input',function(){ this.value=this.value.toUpperCase(); });
+document.getElementById('password').addEventListener('keydown',function(e){ if(e.key==='Enter') doLogin(); });
+
+function showMsg(t,type){ var e=document.getElementById('msg'); e.textContent=t; e.className=type; e.style.display='block'; }
+
+function doLogin() {
+ var sid = document.getElementById('student-id').value.trim();
+ var pw = document.getElementById('password').value;
+ if (!sid||!pw){ showMsg('Please enter your Student ID and password.','error'); return; }
+ var btn = document.getElementById('login-btn');
+ btn.textContent='Signing in…'; btn.disabled=true;
+ fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({student_id:sid,password:pw})})
+ .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+ .then(function(res){
+ btn.textContent='Sign In'; btn.disabled=false;
+ if (!res.ok){ showMsg(res.d.error,'error'); return; }
+ pendingRole = res.d.role;
+ if (res.d.must_change_pw){
+ document.getElementById('cpw-old').value = document.getElementById('password').value;
+ document.getElementById('cpw-modal').classList.add('show');
+ } else {
+ showMsg('Welcome, '+res.d.name+'! Redirecting…','success');
+ setTimeout(function(){ window.location = res.d.role==='admin'?'/admin':'/student'; },600);
+ }
+ }).catch(function(){ btn.textContent='Sign In'; btn.disabled=false; showMsg('Connection error.','error'); });
+}
+
+function doChangePw() {
+ var oldPw=document.getElementById('cpw-old').value;
+ var newPw=document.getElementById('cpw-new').value;
+ var conf =document.getElementById('cpw-confirm').value;
+ var msg =document.getElementById('cpw-msg');
+ function showCpw(t,ok){ msg.textContent=t; msg.style.cssText='display:block;padding:9px 12px;border-radius:8px;background:'+(ok?'var(--green-pale)':'var(--red-pale)')+';color:'+(ok?'var(--green-dark)':'var(--red)'); }
+ if (!newPw||newPw.length<6){ showCpw('Password must be at least 6 characters.',false); return; }
+ if (newPw!==conf){ showCpw('Passwords do not match.',false); return; }
+ fetch('/api/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({old_password:oldPw,new_password:newPw})})
+ .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+ .then(function(res){
+ if (!res.ok){ showCpw(res.d.error,false); return; }
+ showCpw('Password set! Redirecting…',true);
+ setTimeout(function(){ window.location=pendingRole==='admin'?'/admin':'/student'; },800);
+ });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvacuAI — Student Dashboard</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+<style>
+ .page-wrap { max-width:1100px; margin:0 auto; padding:24px 20px; display:grid; grid-template-columns:1fr 340px; gap:20px; }
+ @media(max-width:720px){ .page-wrap{grid-template-columns:1fr;} }
+
+ /* Alert banner */
+ #alert-banner { max-width:1100px; margin:0 auto; padding:0 20px; }
+ .banner-inner { padding:13px 18px; border-radius:var(--radius); font-weight:700; font-size:15px; display:none; align-items:center; gap:10px; margin-bottom:16px; }
+ .banner-inner.show { display:flex; }
+ .banner-inner.earthquake { background:var(--amber-pale); color:#7a5500; border:1.5px solid #e6b800; }
+ .banner-inner.flood { background:var(--blue-pale); color:#1a3f7a; border:1.5px solid #4a90d9; }
+ .banner-inner.fire { background:var(--red-pale); color:#8c1c0c; border:1.5px solid var(--red); }
+ .banner-inner.general { background:var(--green-pale); color:var(--green-dark); border:1.5px solid var(--green-muted); }
+
+ /* Map */
+ .map-wrap { background:#1a1a2e; border-radius:var(--radius); height:420px; position:relative; overflow:hidden; }
+ #map-loading { position:absolute; inset:0; background:#1a1a2e; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; font-size:14px; gap:12px; z-index:10; }
+ .spinner { width:36px; height:36px; border:3px solid rgba(255,255,255,0.2); border-top-color:var(--green-light); border-radius:50%; animation:spin .8s linear infinite; }
+ @keyframes spin{to{transform:rotate(360deg)}}
+ #map-error { position:absolute; inset:0; background:#1a1a2e; display:none; flex-direction:column; align-items:center; justify-content:center; color:#aaa; font-size:13px; text-align:center; padding:24px; gap:8px; }
+ .map-controls-hint { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.55); color:#ccc; font-size:11px; padding:5px 12px; border-radius:20px; pointer-events:none; white-space:nowrap; z-index:5; }
+ #building-popup { position:absolute; top:14px; left:14px; background:rgba(255,255,255,0.96); border-radius:10px; padding:12px 16px; font-size:13px; box-shadow:0 4px 16px rgba(0,0,0,0.25); display:none; max-width:220px; z-index:20; border-left:4px solid var(--green-mid); }
+ #building-popup .bp-title { font-weight:700; color:var(--green-dark); font-size:14px; margin-bottom:5px; }
+ #building-popup .bp-close { position:absolute; top:8px; right:10px; cursor:pointer; color:var(--text-muted); font-size:16px; }
+ #building-popup ul { margin:6px 0 0 14px; color:var(--text-sub); font-size:12px; line-height:1.7; }
+ .map-toolbar { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; align-items:center; }
+ .map-toolbar span { font-size:12px; color:var(--text-muted); margin-left:auto; }
+
+ /* Type buttons */
+ .type-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
+ .type-btn { padding:9px; border-radius:8px; border:1.5px solid var(--border); background:transparent; font-size:12px; font-weight:600; cursor:pointer; color:var(--text-sub); transition:all .15s; text-align:center; }
+ .type-btn[data-t=earthquake].active { border-color:#e6b800; background:var(--amber-pale); color:#7a5500; }
+ .type-btn[data-t=flood].active { border-color:#4a90d9; background:var(--blue-pale); color:#1a3f7a; }
+ .type-btn[data-t=fire].active { border-color:var(--red); background:var(--red-pale); color:#8c1c0c; }
+
+ /* Alert delete btn */
+ .alert-delete-btn { margin-left:auto; background:transparent; border:1px solid rgba(0,0,0,0.15); border-radius:6px; padding:3px 8px; font-size:12px; cursor:pointer; color:var(--text-muted); transition:all .15s; flex-shrink:0; }
+ .alert-delete-btn:hover { background:var(--red); color:#fff; border-color:var(--red); }
+
+ /* Safe section */
+ .safe-section { text-align:center; padding:16px; background:var(--green-pale); border-radius:var(--radius); border:1.5px solid var(--green-muted); }
+ .safe-section p { font-size:13px; color:var(--text-sub); margin-bottom:10px; }
+
+ /* SOS status card */
+ #sos-status-card { display:none; background:#fff; border:2px solid var(--red); border-radius:10px; padding:14px 16px; margin-top:10px; }
+ #sos-status-msg { font-size:14px; font-weight:600; color:var(--red); margin-bottom:8px; }
+ #sos-notification{ font-size:13px; color:var(--text-sub); margin-bottom:10px; display:none; padding:8px 10px; background:var(--amber-pale); border-radius:8px; }
+
+ /* Change password modal */
+ #cpw-msg { font-size:13px; padding:9px 12px; border-radius:8px; margin-bottom:10px; display:none; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+ <div class="navbar-brand">
+ <div class="navbar-logo"></div>
+ <div><div class="navbar-title">EvacuAI</div><div class="navbar-subtitle">Cebu Evacuation System</div></div>
+ </div>
+ <div class="navbar-links">
+ <a href="/profile" style="font-size:13px;color:var(--text-sub);font-weight:500;text-decoration:none;"> {{ name }}</a>
+ <span class="badge badge-student">Student</span>
+ <a href="#" onclick="openChangePw()"> Change Password</a>
+ <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
+ </div>
+</nav>
+
+<!-- Alert banner -->
+<div id="alert-banner"><div class="banner-inner" id="banner-inner">
+ <span id="banner-icon"></span>
+ <span id="banner-text"></span>
+</div></div>
+
+<div class="page-wrap">
+
+ <!-- LEFT column -->
+ <div>
+ <!-- 3D Map -->
+ <div class="card" style="margin-bottom:16px;padding:14px;">
+ <div class="card-title">Campus 3D Map</div>
+ <div class="map-toolbar">
+ <button class="btn btn-ghost btn-sm" onclick="resetCamera()"> Reset View</button>
+ <button class="btn btn-ghost btn-sm" onclick="toggleTopView()"> Top View</button>
+ <span> Drag · Scroll · Right-drag</span>
+ </div>
+ <div class="map-wrap" id="map-container">
+ <div id="map-loading"><div class="spinner"></div><div id="map-load-txt">Loading 3D campus map…</div></div>
+ <div id="map-error"><div style="font-size:40px;"></div><strong style="color:#fff;">3D map not found</strong><div>Place <code style="color:#aaa;">map.obj</code> + <code style="color:#aaa;">map.mtl</code> in <code style="color:#aaa;">evacuai/static/</code></div></div>
+ <div id="building-popup"><span class="bp-close" onclick="closePopup()"></span><div class="bp-title" id="bp-title"></div><div id="bp-body"></div></div>
+ <div class="map-controls-hint">Click any building for evacuation info</div>
+ </div>
+ </div>
+
+ <!-- Disaster Alert Report -->
+ <div class="card" style="margin-bottom:16px;">
+ <div class="card-title"> Report Disaster Alert</div>
+ <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Select a disaster type and submit. Admin will review before broadcasting to all students.</p>
+ <div class="type-grid">
+ <button class="type-btn" data-t="earthquake" onclick="setType('earthquake')"> Earthquake</button>
+ <button class="type-btn" data-t="flood" onclick="setType('flood')"> Flood</button>
+ <button class="type-btn" data-t="fire" onclick="setType('fire')"> Fire</button>
+ </div>
+ <div class="form-group">
+ <label>Location <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+ <input type="text" id="s-location" placeholder="e.g. Building A, 3rd floor">
+ </div>
+ <div class="form-group">
+ <label>Details <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+ <textarea id="s-detail" placeholder="Describe what you observed…"></textarea>
+ </div>
+ <button class="btn btn-primary btn-full" onclick="sendStudentAlert()">Submit Report</button>
+ </div>
+
+ <!--Hazard Report -->
+ <div class="card">
+ <div class="card-title"> Report a Hazard</div>
+ <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Report a blocked path, unsafe area, or campus hazard. Only admin can see this — it does not broadcast to other students.</p>
+ <div class="form-group">
+ <label>Location <span style="color:var(--red);font-size:11px;">*required</span></label>
+ <input type="text" id="h-location" placeholder="e.g. Building B stairwell 2">
+ </div>
+ <div class="form-group">
+ <label>What is the hazard?</label>
+ <textarea id="h-detail" placeholder="e.g. Stairwell flooded, door blocked, broken glass…"></textarea>
+ </div>
+ <button class="btn btn-amber btn-full" onclick="sendHazardReport()"> SubmitHazard Report</button>
+ </div>
+ </div>
+
+ <!-- RIGHT column -->
+ <div>
+ <!-- SOS -->
+ <div style="margin-bottom:16px;">
+ <button class="sos-btn" id="sos-btn" onclick="sendSOS()">SOSSOS — I Need Help</button>
+ <div style="font-size:12px;color:var(--text-muted);margin-top:7px;text-align:center;">Sends emergency signal directly to admin and safety officers.</div>
+ <div id="sos-status-card">
+ <div id="sos-status-msg">SOSSOS Active — waiting for response...</div>
+ <div id="sos-notification"></div>
+ <button id="sos-cancel-btn" class="btn btn-ghost btn-sm" onclick="cancelSOS()">Cancel SOS</button>
+ </div>
+ </div>
+
+ <!-- Live alert feed -->
+ <div class="card" style="margin-bottom:16px;">
+ <div class="card-title">Live Alerts</div>
+ <div class="refresh-row"><span class="live-dot"></span> Auto-refreshing every 3s</div>
+ <div id="feed-wrap" style="max-height:300px;overflow-y:auto;"><div class="empty">No alerts yet.</div></div>
+ </div>
+
+ <!-- Mark safe -->
+ <div class="card">
+ <div class="card-title">Safety Status</div>
+ <div class="safe-section">
+ <p>After evacuating safely, confirm your status so admin can track everyone.</p>
+ <button class="btn btn-primary btn-full" id="safe-btn" onclick="markSafe()">I am Safe</button>
+ </div>
+ </div>
+ </div>
+
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal-overlay" id="cpw-modal">
+ <div class="modal-box">
+ <div class="modal-title"> Change Password</div>
+ <div id="cpw-msg"></div>
+ <div class="form-group"><label>Current password</label><input type="password" id="cpw-old" placeholder="Your current password"></div>
+ <div class="form-group"><label>New password</label><input type="password" id="cpw-new" placeholder="At least 6 characters"></div>
+ <div class="form-group"><label>Confirm new password</label><input type="password" id="cpw-confirm" placeholder="Repeat new password"></div>
+ <div class="modal-actions">
+ <button class="btn btn-primary" onclick="doChangePw()">Save Password</button>
+ <button class="btn btn-ghost" onclick="closeCpwModal()">Cancel</button>
+ </div>
+ </div>
+</div>
+
+<div id="toast"></div>
+
+<script> var alertType = null;
+var markedSafe = false;
+var sosSent = false;
+var activeSosId = null;
+var SESSION_USER_ID = null;
+
+fetch('/api/me').then(function(r){return r.json();}).then(function(d){SESSION_USER_ID=d.id;}).catch(function(){});
+
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toast(msg,isError){
+ var el=document.getElementById('toast');
+ el.textContent=msg; el.className='show'+(isError?' error':'');
+ setTimeout(function(){el.className='';},3000);
+}
+function doLogout(){
+ fetch('/api/logout',{method:'POST'}).catch(function(){}).finally(function(){window.location.href='/logout';});
+}
+
+// Type selector 
+function setType(t){
+ alertType=t;
+ document.querySelectorAll('.type-btn').forEach(function(b){b.classList.toggle('active',b.dataset.t===t);});
+}
+
+// Disaster alert (pending → admin approves → goes live) 
+function sendStudentAlert(){
+ if (!alertType){toast('Please select a disaster type first.',true);return;}
+ var loc = document.getElementById('s-location').value.trim();
+ var det = document.getElementById('s-detail').value.trim();
+ var msg = '';
+ if (loc&&det) msg='['+loc+'] '+det;
+ else if (loc) msg='Hazard at: '+loc;
+ else if (det) msg=det;
+ else msg=alertType.toUpperCase()+' reported on campus.';
+ fetch('/api/alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:alertType,message:msg})})
+ .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
+ .then(function(res){
+ if(res.d.error){toast(res.d.error,true);return;}
+ toast('Report submitted! Waiting for admin approval.');
+ document.getElementById('s-location').value='';
+ document.getElementById('s-detail').value='';
+ alertType=null;
+ document.querySelectorAll('.type-btn').forEach(function(b){b.classList.remove('active');});
+ });
+}
+
+// Hazard report (private to admin only) 
+function sendHazardReport(){
+ var loc = document.getElementById('h-location').value.trim();
+ var det = document.getElementById('h-detail').value.trim();
+ if (!loc){toast('Please enter the hazard location.',true);return;}
+ fetch('/api/reports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:loc,detail:det})})
+ .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
+ .then(function(res){
+ if(res.d.error){toast(res.d.error,true);return;}
+ toast('Hazard report submitted to admin.');
+ document.getElementById('h-location').value='';
+ document.getElementById('h-detail').value='';
+ });
+}
+
+// Alert feed (approved only) 
+var typeIcons={earthquake:'',flood:'',fire:'',sos:'SOS'};
+function fetchAlerts(){
+ fetch('/api/alerts').then(function(r){return r.json();}).then(function(list){
+ if(!Array.isArray(list))return;
+ var wrap=document.getElementById('feed-wrap');
+ var banner=document.getElementById('banner-inner');
+ if(!list.length){
+ wrap.innerHTML='<div class="empty">No alerts yet.</div>';
+ banner.className='banner-inner'; return;
+ }
+ // Show banner for latest approved alert
+ var a=list[0];
+ document.getElementById('banner-icon').textContent={earthquake:'',flood:'',fire:''}[a.type]||'';
+ document.getElementById('banner-text').textContent=a.type.toUpperCase()+': '+a.message;
+ banner.className='banner-inner show '+a.type;
+
+ wrap.innerHTML=list.map(function(a){
+ var isOwn=SESSION_USER_ID&&a.user_id===SESSION_USER_ID;
+ var delBtn=isOwn?'<button class="alert-delete-btn" onclick="deleteAlert('+a.id+')"> Delete</button>':'';
+ return '<div class="alert-item '+escHtml(a.type)+'" id="alert-'+a.id+'">'+
+ '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+
+ '<span class="badge badge-'+escHtml(a.type)+'">'+escHtml(a.type).toUpperCase()+'</span>'+
+ '<span class="badge badge-'+escHtml(a.sender_role)+'">'+escHtml(a.sender_role)+'</span>'+
+ delBtn+
+ '</div>'+
+ '<div class="alert-message">'+(typeIcons[a.type]||'')+' '+escHtml(a.message)+'</div>'+
+ '<div class="alert-meta">From: '+escHtml(a.sender)+' · '+escHtml(a.created_at)+'</div>'+
+ '</div>';
+ }).join('');
+ }).catch(function(e){console.error('fetchAlerts:',e);});
+}
+
+function deleteAlert(id){
+ if(!confirm('Delete this alert?'))return;
+ fetch('/api/alerts/'+id,{method:'DELETE'}).then(function(r){return r.json();}).then(function(d){
+ if(d.error){toast(d.error,true);return;}
+ toast('Alert deleted.');
+ var el=document.getElementById('alert-'+id);
+ if(el)el.remove();
+ });
+}
+
+// Mark safe 
+function markSafe(){
+ if(markedSafe)return;
+ fetch('/api/safe',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+ if(d.error){toast(d.error,true);return;}
+ markedSafe=true;
+ var btn=document.getElementById('safe-btn');
+ btn.textContent=' Marked as Safe'; btn.disabled=true; btn.style.opacity='.7';
+ toast('You have been marked as safe. Stay calm.');
+ });
+}
+
+// SOS 
+function sendSOS(){
+ if(sosSent)return;
+ if(!confirm('Send SOS? This will immediately alert admin and safety officers.'))return;
+ fetch('/api/sos',{method:'POST'}).then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
+ .then(function(res){
+ if(!res.ok){toast(res.d.error,true);return;}
+ sosSent=true;
+ var btn=document.getElementById('sos-btn');
+ btn.textContent='SOSSOS Sent'; btn.disabled=true;
+ document.getElementById('sos-status-card').style.display='block';
+ toast('SOS sent! Stay where you are if it is safe to do so.');
+ pollSOSStatus();
+ });
+}
+
+function pollSOSStatus(){
+ fetch('/api/sos/my').then(function(r){return r.json();}).then(function(d){
+ if(!d.active)return;
+ activeSosId=d.id;
+ var msgEl=document.getElementById('sos-status-msg');
+ var notifEl=document.getElementById('sos-notification');
+ var cancelBtn=document.getElementById('sos-cancel-btn');
+ var card=document.getElementById('sos-status-card');
+ if(d.resolved){
+ msgEl.textContent=' You have been marked safe by a safety officer.';
+ msgEl.style.color='var(--green-mid)';
+ if(d.notification){notifEl.textContent=d.notification;notifEl.style.display='block';}
+ cancelBtn.style.display='none';
+ card.style.borderColor='var(--green-mid)';
+ markedSafe=true;
+ var safeBtn=document.getElementById('safe-btn');
+ safeBtn.textContent=' Marked Safe by Safety Officer';
+ safeBtn.disabled=true; safeBtn.style.opacity='.7';
+ return;
+ }
+ if(d.responded){
+ msgEl.textContent=' A safety officer is on the way!';
+ msgEl.style.color='#b7770d';
+ if(d.notification){notifEl.textContent=d.notification;notifEl.style.display='block';}
+ card.style.borderColor='#e6b800';
+ cancelBtn.style.display='none';
+ } else {
+ msgEl.textContent='SOSSOS Active — waiting for response...';
+ msgEl.style.color='var(--red)';
+ cancelBtn.style.display='inline-flex';
+ }
+ if(!d.resolved)setTimeout(pollSOSStatus,3000);
+ }).catch(function(){setTimeout(pollSOSStatus,5000);});
+}
+
+function cancelSOS(){
+ if(!activeSosId)return;
+ if(!confirm('Cancel your SOS request?'))return;
+ fetch('/api/sos/'+activeSosId+'/cancel',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+ if(d.error){toast(d.error,true);return;}
+ sosSent=false; activeSosId=null;
+ var btn=document.getElementById('sos-btn');
+ btn.textContent='SOSSOS — I Need Help'; btn.disabled=false;
+ document.getElementById('sos-status-card').style.display='none';
+ document.getElementById('sos-notification').style.display='none';
+ toast('SOS cancelled.');
+ });
+}
+
+// Change Password 
+function openChangePw(){ document.getElementById('cpw-modal').classList.add('show'); }
+function closeCpwModal(){ document.getElementById('cpw-modal').classList.remove('show'); }
+function doChangePw(){
+ var oldPw=document.getElementById('cpw-old').value;
+ var newPw=document.getElementById('cpw-new').value;
+ var conf =document.getElementById('cpw-confirm').value;
+ var msgEl=document.getElementById('cpw-msg');
+ function showCpw(t,ok){msgEl.textContent=t;msgEl.style.cssText='display:block;padding:9px 12px;border-radius:8px;background:'+(ok?'var(--green-pale)':'var(--red-pale)')+';color:'+(ok?'var(--green-dark)':'var(--red)');}
+ if(!newPw||newPw.length<6){showCpw('Password must be at least 6 characters.',false);return;}
+ if(newPw!==conf){showCpw('Passwords do not match.',false);return;}
+ fetch('/api/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({old_password:oldPw,new_password:newPw})})
+ .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
+ .then(function(res){
+ if(!res.ok){showCpw(res.d.error,false);return;}
+ showCpw('Password changed successfully!',true);
+ setTimeout(closeCpwModal,1200);
+ });
+}
+
+// Three.js 3D Map 
+var BUILDING_INFO={
+ 'default':{name:'Campus Building',info:['Use nearest stairwell','Follow green exit signs','Assemble at main gate']},
+ 'building_a':{name:'Building A',info:['Exit via Ground Floor West','Avoid Stair 2','Assembly: Parking Area']},
+ 'building_b':{name:'Building B',info:['Use Fire Exit North side','Do NOT use elevator','Assembly: Oval Field']},
+ 'gym':{name:'Gymnasium',info:['All exits on ground level','Exit through main doors','Assembly: Front Gate']},
+ 'library':{name:'Library',info:['Use Side Door east wing','Stay low if smoke present','Assembly: Garden Area']}
+};
+var threeScene,threeCamera,threeRenderer,threeControls,threeModel;
+var topViewActive=false;
+var raycaster=new THREE.Raycaster();
+var mouse=new THREE.Vector2();
+
+function initThree(){
+ var container=document.getElementById('map-container');
+ threeScene=new THREE.Scene();
+ threeScene.background=new THREE.Color(0x1a1a2e);
+ threeCamera=new THREE.PerspectiveCamera(45,container.clientWidth/container.clientHeight,0.1,1000);
+ threeCamera.position.set(0,80,120);
+ threeRenderer=new THREE.WebGLRenderer({antialias:true});
+ threeRenderer.setSize(container.clientWidth,container.clientHeight);
+ threeRenderer.setPixelRatio(window.devicePixelRatio);
+ threeRenderer.domElement.style.cssText='width:100%;height:100%;display:block;cursor:grab;';
+ container.appendChild(threeRenderer.domElement);
+ threeScene.add(new THREE.AmbientLight(0xffffff,0.6));
+ var sun=new THREE.DirectionalLight(0xffeedd,1.2); sun.position.set(80,120,60); threeScene.add(sun);
+ threeScene.add(new THREE.GridHelper(300,30,0x2a2a4a,0x2a2a4a));
+ threeControls=new THREE.OrbitControls(threeCamera,threeRenderer.domElement);
+ threeControls.enableDamping=true; threeControls.dampingFactor=0.08;
+ threeControls.minDistance=20; threeControls.maxDistance=400;
+ threeControls.maxPolarAngle=Math.PI/2;
+ loadOBJ();
+ threeRenderer.domElement.addEventListener('click',onMapClick);
+ window.addEventListener('resize',function(){
+ threeCamera.aspect=container.clientWidth/container.clientHeight;
+ threeCamera.updateProjectionMatrix();
+ threeRenderer.setSize(container.clientWidth,container.clientHeight);
+ });
+ (function animate(){requestAnimationFrame(animate);threeControls.update();threeRenderer.render(threeScene,threeCamera);})();
+}
+
+function loadOBJ(){
+ var mtl=new THREE.MTLLoader(); mtl.setPath('/static/');
+ mtl.load('map.mtl',function(mats){
+ mats.preload();
+ var obj=new THREE.OBJLoader(); obj.setMaterials(mats); obj.setPath('/static/');
+ obj.load('map.obj',onOBJLoaded,onOBJProgress,onOBJError);
+ },null,function(){
+ var obj=new THREE.OBJLoader(); obj.setPath('/static/');
+ obj.load('map.obj',onOBJLoaded,onOBJProgress,onOBJError);
+ });
+}
+
+function onOBJLoaded(obj){
+ var box=new THREE.Box3().setFromObject(obj);
+ var center=box.getCenter(new THREE.Vector3());
+ var size=box.getSize(new THREE.Vector3());
+ var scale=80/Math.max(size.x,size.y,size.z);
+ obj.scale.setScalar(scale);
+ obj.position.sub(center.multiplyScalar(scale));
+ var mat=new THREE.MeshLambertMaterial({color:0x4e7a27});
+ obj.traverse(function(c){if(c.isMesh){if(!c.material||!c.material.color)c.material=mat;c.castShadow=true;}});
+ threeModel=obj; threeScene.add(obj);
+ document.getElementById('map-loading').style.display='none';
+}
+function onOBJProgress(xhr){
+ if(xhr.total){document.getElementById('map-load-txt').textContent='Loading… '+Math.round(xhr.loaded/xhr.total*100)+'%';}
+}
+function onOBJError(){
+ document.getElementById('map-loading').style.display='none';
+ document.getElementById('map-error').style.display='flex';
+}
+function onMapClick(e){
+ if(!threeModel)return;
+ var rect=threeRenderer.domElement.getBoundingClientRect();
+ mouse.x=((e.clientX-rect.left)/rect.width)*2-1;
+ mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+ raycaster.setFromCamera(mouse,threeCamera);
+ var hits=raycaster.intersectObjects(threeModel.children,true);
+ if(!hits.length){closePopup();return;}
+ var hit=hits[0].object;
+ var name=(hit.name||hit.parent&&hit.parent.name||'').toLowerCase().replace(/\s+/g,'_');
+ var info=BUILDING_INFO[name]||BUILDING_INFO['default'];
+ document.getElementById('bp-title').textContent=info.name;
+ document.getElementById('bp-body').innerHTML='<ul>'+info.info.map(function(i){return'<li>'+i+'</li>';}).join('')+'</ul>';
+ document.getElementById('building-popup').style.display='block';
+ if(hit.material&&hit.material.color){var orig=hit.material.color.clone();hit.material.color.set(0xffdd44);setTimeout(function(){hit.material.color.copy(orig);},600);}
+}
+function closePopup(){document.getElementById('building-popup').style.display='none';}
+function resetCamera(){topViewActive=false;threeCamera.position.set(0,80,120);threeControls.target.set(0,0,0);threeControls.update();}
+function toggleTopView(){topViewActive=!topViewActive;threeCamera.position.set(0,topViewActive?200:80,topViewActive?0.01:120);threeControls.target.set(0,0,0);threeControls.update();}
+
+// Init 
+window.addEventListener('load',function(){
+ initThree();
+ fetchAlerts();
+ setInterval(fetchAlerts,3000);
+});
+</script>
+</body>
+</html>
