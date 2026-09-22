@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvacuAI - Campus Map</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+body { display:flex; flex-direction:column; min-height:100vh; }
+
+/* Mobile WebView styles — applied via JS when inside Android app */
+body.webview-mode .navbar { display: none !important; }
+body.webview-mode .status-bar { display: none !important; }
+body.webview-mode .instruction-banner { display: none !important; }
+body.webview-mode .instruction-strip { display: block; margin-bottom: 8px; }
+body.webview-mode .map-page { padding: 4px !important; padding-top: 36px !important; }
+body.webview-mode .floor-tabs { display: none !important; }
+body.webview-mode .map-container { min-height: auto !important; overflow: visible !important; }
+body.webview-mode .map-legend { display: none !important; }
+body.webview-mode { overflow-y: auto !important; }
+
+.map-page { max-width:1100px; margin:0 auto; padding:20px; width:100%; }
+.floor-tabs { display:flex; gap:8px; margin-bottom:16px; }
+.floor-tab { padding:8px 20px; border-radius:8px; border:1.5px solid var(--border); background:var(--surface); font-size:13px; font-weight:600; cursor:pointer; color:var(--text-sub); transition:all .15s; }
+.floor-tab.active { background:var(--green-mid); color:#fff; border-color:var(--green-mid); }
+.instruction-banner { padding:12px 16px; border-radius:10px; margin-bottom:14px; display:none; }
+.instruction-banner.show { display:block; }
+.instruction-banner.fire { background:var(--red-pale); border:1.5px solid var(--red); }
+.instruction-banner.flood { background:var(--blue-pale); border:1.5px solid var(--blue); }
+.instruction-banner.earthquake { background:var(--amber-pale); border:1.5px solid var(--amber); }
+.instruction-banner.general { background:var(--green-pale); border:1.5px solid var(--green-mid); }
+.instruction-type { font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; margin-bottom:4px; }
+.instruction-text { font-size:13px; font-weight:500; line-height:1.5; }
+.instruction-strip { display:none; padding:10px 14px; border-radius:8px; margin-bottom:10px; font-size:12px; font-weight:500; line-height:1.5; }
+.instruction-strip.show { display:block; }
+.instruction-strip.fire { background:var(--red-pale); border:1.5px solid var(--red); color:#8c1c0c; }
+.instruction-strip.flood { background:var(--blue-pale); border:1.5px solid #4a90d9; color:#1a3f7a; }
+.instruction-strip.earthquake { background:var(--amber-pale); border:1.5px solid #e6b800; color:#7a5500; }
+.instruction-strip.general { background:var(--green-pale); border:1.5px solid var(--green-mid); color:var(--green-dark); }
+.map-container { background:var(--surface); border:1.5px solid var(--border); border-radius:12px; padding:16px; overflow:auto; }
+.map-container svg { width:100%; height:auto; max-width:900px; display:block; margin:0 auto; }
+.map-container svg rect { transition:fill .4s, stroke .4s; cursor:pointer; }
+.map-container svg rect:hover { opacity:.85; }
+.map-legend { display:flex; gap:16px; margin-top:14px; flex-wrap:wrap; }
+.leg { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-sub); }
+.leg-box { width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,0.2); }
+.reports-section { margin-top:16px; }
+.report-badge { display:inline-block; padding:3px 10px; border-radius:6px; font-size:11px; font-weight:600; margin-right:6px; margin-bottom:6px; }
+.report-badge.blocked { background:var(--red-pale); color:var(--red); border:1px solid var(--red); }
+.report-badge.hazard { background:var(--amber-pale); color:var(--amber); border:1px solid var(--amber); }
+.status-bar { display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 14px; background:var(--surface); border:1px solid var(--border); border-radius:8px; font-size:13px; }
+.status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.status-dot.safe { background:#1a7a3c; animation:pulse-green 2s infinite; }
+.status-dot.alert { background:var(--red); animation:pulse-red 1.2s infinite; }
+@keyframes pulse-green { 0%,100%{opacity:1}50%{opacity:.4} }
+@keyframes pulse-red   { 0%,100%{opacity:1}50%{opacity:.3} }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <div class="navbar-brand">
+    <div class="navbar-logo">EA</div>
+    <div><div class="navbar-title">EvacuAI</div><div class="navbar-subtitle">Campus Evacuation Map</div></div>
+  </div>
+  <div class="navbar-links">
+    <a href="/admin">Dashboard</a>
+    <a href="/admin/students">Students</a>
+    <a href="/profile" style="font-size:13px;color:var(--text-sub);font-weight:500;">{{ name }}</a>
+    <span class="badge badge-admin">Admin</span>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
+  </div>
+</nav>
+
+<div class="map-page" style="padding-top:36px;">
+
+  <div class="status-bar" id="status-bar">
+    <div class="status-dot safe" id="status-dot"></div>
+    <span id="status-text">Campus map loading...</span>
+    <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">Auto-updates every 5 seconds</span>
+  </div>
+
+  <div class="instruction-banner" id="instruction-banner">
+    <div class="instruction-type" id="instruction-type"></div>
+    <div class="instruction-text" id="instruction-text"></div>
+  </div>
+
+  <div class="instruction-strip" id="instruction-strip"></div>
+
+  <div class="floor-tabs">
+    <button class="floor-tab active" onclick="switchFloor('Ground')" id="tab-Ground">Ground Floor</button>
+    <button class="floor-tab" onclick="switchFloor('Second')" id="tab-Second">2nd Floor</button>
+    <button class="floor-tab" onclick="switchFloor('Third')" id="tab-Third">3rd Floor</button>
+  </div>
+
+  <div class="map-container" id="map-container">
+    <div style="text-align:center;padding:40px;color:var(--text-muted)">Loading campus map...</div>
+  </div>
+
+  <div class="map-legend">
+    <div class="leg"><div class="leg-box" style="background:#d4edda;border-color:#1a7a3c"></div>Safe / Clear</div>
+    <div class="leg"><div class="leg-box" style="background:#f8d7da;border-color:#c0392b"></div>Blocked / Hazard</div>
+    <div class="leg"><div class="leg-box" style="background:#eef4fb;border-color:#6a8fb0"></div>No reports</div>
+    <div class="leg"><div class="leg-box" style="background:#b8cfe8;border-color:#4a7aaa"></div>Stairs / Corridor</div>
+    <div class="leg"><div class="leg-box" style="background:#d4edda;border-color:#1a7a3c"></div>Exit</div>
+  </div>
+
+  <div class="reports-section" id="reports-section" style="display:none">
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">Active Hazard Reports</div>
+      <div id="reports-list"></div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Detect WebView and apply mobile mode ──────────────────────────────────────
+(function(){
+  var ua = navigator.userAgent.toLowerCase();
+  var isWebView = ua.indexOf('wv') !== -1 ||
+                  ua.indexOf('webview') !== -1 ||
+                  (ua.indexOf('android') !== -1 && ua.indexOf('version/') === -1);
+  if(isWebView){
+    document.body.classList.add('webview-mode');
+  }
+})();
+
+window.isEvacuating = false;
+window.userFloor = '';
+window.userRoom = '';
+var currentFloor = 'Ground';
+var blockStatus = {};
+var currentAlertType = null;
+
+var BLOCKED_KEYWORDS = ['blocked','cannot pass','cannot use','flooded','closed','fire','smoke','locked','broken','collapse'];
+var HAZARD_KEYWORDS  = ['wet','slippery','debris','crowd','dark','dangerous','hazard'];
+
+function doLogout(){
+  fetch('/api/logout',{method:'POST'}).catch(function(){}).finally(function(){window.location.href='/logout'});
+}
+function toast(msg,isError){
+  var e=document.getElementById('toast');
+  e.textContent=msg;e.className='show'+(isError?' error':'');
+  setTimeout(function(){e.className=''},3000);
+}
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function switchFloor(floor){
+  currentFloor = floor;
+  document.querySelectorAll('.floor-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.getElementById('tab-'+floor).classList.add('active');
+  loadFloorSVG(floor);
+}
+
+function loadFloorSVG(floor){
+  var container = document.getElementById('map-container');
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">Loading '+floor+' floor...</div>';
+  fetch('/static/svg/floors/Floor_'+floor+'.svg')
+    .then(function(r){ return r.text(); })
+    .then(function(svgText){
+      container.innerHTML = svgText;
+      styleRooms();
+    })
+    .catch(function(){
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">Map file not found. Run generate_svg.py first.</div>';
+    });
+}
+
+function styleRooms(){
+  var svg = document.querySelector('#map-container svg');
+  if(!svg) return;
+  svg.querySelectorAll('rect[id]').forEach(function(rect){
+    var id = rect.id;
+    var status = blockStatus[id];
+    if(id.indexOf('Stairs') !== -1 || id.indexOf('Elevator') !== -1){
+      rect.style.fill = '#b8cfe8'; rect.style.stroke = '#4a7aaa'; rect.style.strokeWidth = '1';
+    } else if(id.indexOf('Exit') !== -1){
+      rect.style.fill = '#d4edda'; rect.style.stroke = '#1a7a3c'; rect.style.strokeWidth = '2';
+    } else if(id.indexOf('Corridor') !== -1){
+      rect.style.fill = '#dce8f5'; rect.style.stroke = '#8aabcc';
+    } else if(status === 'blocked'){
+      rect.style.fill = '#f8d7da'; rect.style.stroke = '#c0392b'; rect.style.strokeWidth = '2';
+    } else if(status === 'hazard'){
+      rect.style.fill = '#fff3cd'; rect.style.stroke = '#b7770d'; rect.style.strokeWidth = '2';
+    } else {
+      rect.style.fill = '#eef4fb'; rect.style.stroke = '#6a8fb0'; rect.style.strokeWidth = '1';
+    }
+    rect.addEventListener('click', function(){
+      var s = status === 'blocked' ? 'BLOCKED — Do not use' :
+              status === 'hazard'  ? 'HAZARD REPORTED' : 'No reports — appears safe';
+      toast(id.replace(/_/g,' ') + ' — ' + s, status === 'blocked');
+    });
+  });
+  svg.querySelectorAll('text').forEach(function(t){
+    t.style.fill = '#1a3a6b';
+    t.style.fontSize = '7px';
+    t.style.fontFamily = 'Segoe UI, system-ui, sans-serif';
+    t.style.fontWeight = '600';
+  });
+}
+
+function fetchAndUpdateMap(){
+  fetch('/api/reports')
+    .then(function(r){ return r.json(); })
+    .then(function(reports){
+      blockStatus = {};
+      var reportsHtml = '';
+      reports.forEach(function(r){
+        var location = (r.location || '').toLowerCase();
+        var detail   = (r.detail   || '').toLowerCase();
+        var combined = location + ' ' + detail;
+        var matchedRoom = r.room_id || findRoomFromText(r.location + ' ' + (r.detail||''));
+        var isBlocked = BLOCKED_KEYWORDS.some(function(kw){ return combined.indexOf(kw) !== -1; });
+        if(matchedRoom){
+          blockStatus[matchedRoom] = isBlocked ? 'blocked' : 'hazard';
+        }
+        var badgeClass = isBlocked ? 'blocked' : 'hazard';
+        reportsHtml += '<span class="report-badge '+badgeClass+'">'+escHtml(r.location)+'</span>';
+      });
+      if(reports.length > 0){
+        document.getElementById('reports-section').style.display = 'block';
+        document.getElementById('reports-list').innerHTML = reportsHtml;
+      } else {
+        document.getElementById('reports-section').style.display = 'none';
+      }
+
+      // Admin room overrides
+      fetch('/api/room-status')
+        .then(function(r){ return r.json(); })
+        .then(function(list){
+          list.forEach(function(r){
+            if(r.status === 'blocked'){
+              blockStatus[r.room_id] = 'blocked';
+            } else if(r.status === 'passable' && blockStatus[r.room_id] === 'blocked'){
+              delete blockStatus[r.room_id];
+            }
+          });
+          if(isWebViewMode()) styleAllFloors();
+          else styleRooms();
+          if(window.isEvacuating){
+            showEvacuationInstructions(window.userFloor, window.userRoom);
+          }
+        })
+        .catch(function(){
+          if(isWebViewMode()) styleAllFloors();
+          else styleRooms();
+        });
+    })
+    .catch(function(){});
+
+  fetch('/api/alerts')
+    .then(function(r){ return r.json(); })
+    .then(function(alerts){
+      if(alerts.length > 0){
+        var latest = alerts[0];
+        currentAlertType = latest.type;
+        showInstructionBanner(latest.type, latest.message);
+        updateStatusBar(true, latest.type.toUpperCase() + ' ALERT ACTIVE');
+      } else {
+        currentAlertType = null;
+        hideInstructionBanner();
+        updateStatusBar(false, 'Campus is safe — no active alerts');
+      }
+    })
+    .catch(function(){});
+}
+
+function isWebViewMode(){
+  return document.body.classList.contains('webview-mode');
+}
+
+var ROOM_MAP = {
+  'be101':'Room_BE101','be102':'Room_BE102','be103':'Room_BE103',
+  'be104':'Room_BE104','be105':'Room_BE105','be106':'Room_BE106',
+  'be107':'Room_BE107','be108':'Room_BE108',
+  'be201':'Room_BE201','be202':'Room_BE202','be203':'Room_BE203',
+  'be204':'Room_BE204','be205':'Room_BE205','be206':'Room_BE206',
+  'be207':'Room_BE207','be208':'Room_BE208','be209':'Room_BE209','be210':'Room_BE210',
+  'be211':'Room_BE211','be212':'Room_BE212',
+  'be301':'Room_BE301','be302':'Room_BE302','be303':'Room_BE303','be304':'Room_BE304',
+  'stair':'Stairs_Left_G','stairs':'Stairs_Left_G',
+  'left stair':'Stairs_Left_G','right stair':'Stairs_Right_G',
+  'elevator':'Elevator_2','corridor':'Corridor_Ground',
+  'canteen':'Canteen','library':'Library_Elem',
+  'function hall':'FunctionHall','science lab':'ScienceLab_Elem',
+  'faculty':'Faculty_Elem','guidance':'GuidanceOffice',
+  'internet':'InternetSection','student lounge':'StudentLounge',
+  'exit north':'Exit_North','exit south':'Exit_South',
+  'north exit':'Exit_North','south exit':'Exit_South',
+};
+
+function findRoomFromText(text){
+  var lower = text.toLowerCase();
+  var match = lower.match(/be\s*(\d{3})/);
+  if(match){ return ROOM_MAP['be'+match[1]] || null; }
+  for(var key in ROOM_MAP){ if(lower.indexOf(key) !== -1){ return ROOM_MAP[key]; } }
+  return null;
+}
+
+function showEvacuationInstructions(floor, room){
+  if(!window.isEvacuating) return;
+  var strip = document.getElementById('instruction-strip');
+  if(!strip) return;
+  var alertType = currentAlertType || 'general';
+  var instruction = '';
+  switch(alertType.toLowerCase()){
+    case 'fire':
+      instruction = 'FIRE — Do not use elevators. Use nearest stairwell immediately. Proceed to assembly area.';
+      break;
+    case 'flood':
+      instruction = 'FLOOD — Move to higher floors if on Ground Floor. Avoid ground level exits. Await safety officer.';
+      break;
+    case 'earthquake':
+      instruction = 'EARTHQUAKE — Drop, cover and hold on. Once shaking stops exit via stairwells.';
+      break;
+    default:
+      instruction = 'Follow safety officer instructions. Proceed to the nearest safe exit.';
+  }
+  if(floor === 'Ground'){
+    instruction += ' Proceed directly to Exit North or Exit South.';
+  } else if(floor === 'Second'){
+    instruction += ' Use stairwell to descend to Ground Floor then exit.';
+  } else if(floor === 'Third'){
+    instruction += ' Use stairwell to descend to 2nd Floor then Ground Floor.';
+  }
+  var blocked = Object.keys(blockStatus).filter(function(k){ return blockStatus[k]==='blocked'; });
+  if(blocked.length > 0){
+    instruction += ' AVOID: ' + blocked.map(function(k){ return k.replace(/_/g,' '); }).join(', ') + '.';
+  }
+  strip.textContent = 'EVACUATING FROM ' + room.replace(/_/g,' ') + ' (' + floor + ' Floor) — ' + instruction;
+  strip.className = 'instruction-strip show ' + alertType.toLowerCase();
+}
+
+function showInstructionBanner(type, message){
+  if(!window.isEvacuating) return;
+  var banner = document.getElementById('instruction-banner');
+  var typeEl  = document.getElementById('instruction-type');
+  var textEl  = document.getElementById('instruction-text');
+  banner.className = 'instruction-banner show ' + (type || 'general');
+  typeEl.textContent = (type || 'ALERT').toUpperCase() + ' — EVACUATION INSTRUCTIONS';
+  textEl.textContent = getInstruction(type, message);
+}
+
+function hideInstructionBanner(){
+  document.getElementById('instruction-banner').className = 'instruction-banner';
+}
+
+function getInstruction(type, message){
+  var base = '';
+  switch((type||'').toLowerCase()){
+    case 'fire':
+      base = 'Evacuate immediately. Do not use elevators. Use nearest stairwell. Proceed to assembly area.';
+      break;
+    case 'flood':
+      base = 'Move to higher floors. Avoid ground level exits. Use elevated walkways. Await safety officer.';
+      break;
+    case 'earthquake':
+      base = 'Drop, cover and hold on. Move away from windows. Once shaking stops exit via stairwells.';
+      break;
+    default:
+      base = 'Follow safety officer instructions. Proceed to the nearest safe exit.';
+  }
+  var blocked = Object.keys(blockStatus).filter(function(k){ return blockStatus[k]==='blocked'; });
+  if(blocked.length > 0){
+    base += ' AVOID: ' + blocked.map(function(k){ return k.replace(/_/g,' '); }).join(', ') + '.';
+  }
+  return base;
+}
+
+function updateStatusBar(hasAlert, text){
+  var dot  = document.getElementById('status-dot');
+  var span = document.getElementById('status-text');
+  if(!dot || !span) return;
+  dot.className  = 'status-dot ' + (hasAlert ? 'alert' : 'safe');
+  span.textContent = text;
+}
+
+function initMap(){
+  if(isWebViewMode()){
+    loadAllFloors();
+  } else {
+    loadFloorSVG('Ground');
+  }
+  fetchAndUpdateMap();
+  setInterval(function(){
+    fetchAndUpdateMap();
+    if(isWebViewMode()){
+      styleAllFloors();
+    } else {
+      loadFloorSVG(currentFloor);
+    }
+  }, 5000);
+}
+
+function loadAllFloors(){
+  var container = document.getElementById('map-container');
+  container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Loading floors...</div>';
+  var floors = ['Third','Second','Ground'];
+  var labels = ['3rd Floor','2nd Floor','Ground Floor'];
+  var loaded = 0;
+  var floorSVGs = {};
+  floors.forEach(function(floor){
+    fetch('/static/svg/floors/Floor_'+floor+'.svg')
+      .then(function(r){ return r.text(); })
+      .then(function(svgText){
+        floorSVGs[floor] = svgText;
+        loaded++;
+        if(loaded === floors.length){
+          var html = '';
+          floors.forEach(function(f, i){
+            html += '<div style="margin-bottom:12px">';
+            html += '<div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px;padding:4px 8px;background:var(--green-pale);border-radius:6px">'+labels[i]+'</div>';
+            html += '<div id="floor-svg-'+f+'" style="overflow-x:auto">'+floorSVGs[f]+'</div>';
+            html += '</div>';
+          });
+          container.innerHTML = html;
+          styleAllFloors();
+        }
+      })
+      .catch(function(){ loaded++; });
+  });
+}
+
+function styleAllFloors(){
+  ['Ground','Second','Third'].forEach(function(floor){
+    var wrap = document.getElementById('floor-svg-'+floor);
+    if(!wrap) return;
+    var svg = wrap.querySelector('svg');
+    if(!svg) return;
+    svg.style.width = '100%';
+    svg.style.height = 'auto';
+    styleRoomsInSVG(svg);
+  });
+}
+
+function styleRoomsInSVG(svg){
+  svg.querySelectorAll('rect[id]').forEach(function(rect){
+    var id = rect.id;
+    var status = blockStatus[id];
+    if(id.indexOf('Stairs') !== -1 || id.indexOf('Elevator') !== -1){
+      rect.style.fill = '#b8cfe8'; rect.style.stroke = '#4a7aaa'; rect.style.strokeWidth = '1';
+    } else if(id.indexOf('Exit') !== -1){
+      rect.style.fill = '#d4edda'; rect.style.stroke = '#1a7a3c'; rect.style.strokeWidth = '2';
+    } else if(id.indexOf('Corridor') !== -1){
+      rect.style.fill = '#dce8f5'; rect.style.stroke = '#8aabcc';
+    } else if(status === 'blocked'){
+      rect.style.fill = '#f8d7da'; rect.style.stroke = '#c0392b'; rect.style.strokeWidth = '2';
+    } else if(status === 'hazard'){
+      rect.style.fill = '#fff3cd'; rect.style.stroke = '#b7770d'; rect.style.strokeWidth = '2';
+    } else {
+      rect.style.fill = '#eef4fb'; rect.style.stroke = '#6a8fb0'; rect.style.strokeWidth = '1';
+    }
+  });
+  svg.querySelectorAll('text').forEach(function(t){
+    t.style.fill = '#1a3a6b';
+    t.style.fontFamily = 'Segoe UI, system-ui, sans-serif';
+    t.style.fontWeight = '600';
+  });
+}
+
+initMap();
+</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+EvacuAI SVG import guide
+============================================================
+
+Tinkercad extrudes an entire SVG file into ONE shape.
+So import ONE ROOM FILE AT A TIME from svg/rooms/ to keep
+each room a separate, renameable object.
+
+For each imported room:
+  1. Import the .svg (units: Millimeters)
+  2. Set Height = 20 mm (rooms/stairs/corridor)
+  3. Rename the shape to EXACTLY the filename (no .svg)
+  4. Set Z position per floor:
+       Ground   Z = 0
+       Second   Z = 30
+       Third    Z = 60
+
+Do NOT group different rooms together.
+
+Room list by floor (width x depth in mm):
+------------------------------------------------------------
+
+[Ground Floor]  Z = 0
+  Stairs_Left_G              30.0 x  200.0
+  Stairs_Right_G             30.0 x  200.0
+  Corridor_Ground           290.0 x   20.0
+  Room_BE101                 44.3 x   86.0
+  Room_BE103                 44.3 x   86.0
+  Room_BE105                 44.3 x   86.0
+  Room_BE107                 44.3 x   86.0
+  Canteen                    44.3 x   86.0
+  Exit_South                 44.3 x   86.0
+  Room_BE102                 44.3 x   86.0
+  Room_BE104                 44.3 x   86.0
+  Room_BE106                 44.3 x   86.0
+  Room_BE108                 44.3 x   86.0
+  Exit_North                 44.3 x   86.0
+  PumpRoom                   44.3 x   86.0
+
+[Second Floor]  Z = 30
+  Stairs_Left_2              30.0 x  200.0
+  Stairs_Right_2             30.0 x  200.0
+  Elevator_2                 15.0 x   96.0
+  Corridor_Second           275.0 x   20.0
+  Room_BE201                 30.4 x   86.0
+  Room_BE203                 30.4 x   86.0
+  Room_BE205                 30.4 x   86.0
+  Room_BE207                 30.4 x   86.0
+  Room_BE209                 30.4 x   86.0
+  Room_BE211                 30.4 x   86.0
+  UtilityRoom                30.4 x   86.0
+  GuidanceOffice             30.4 x   86.0
+  Room_BE202                 35.3 x   86.0
+  Room_BE204                 35.3 x   86.0
+  Room_BE206                 35.3 x   86.0
+  Room_BE208                 35.3 x   86.0
+  Room_BE210                 35.3 x   86.0
+  Room_BE212                 35.3 x   86.0
+  ScienceLab_Elem            35.3 x   86.0
+
+[Third Floor]  Z = 60
+  Stairs_Left_3              30.0 x  200.0
+  Stairs_Right_3             30.0 x  200.0
+  Elevator_3                 15.0 x   96.0
+  Corridor_Third            275.0 x   20.0
+  Room_BE301                 51.0 x   86.0
+  Room_BE303                 51.0 x   86.0
+  FunctionHall               51.0 x   86.0
+  Library_HighSchool         51.0 x   86.0
+  Faculty_Elem               51.0 x   86.0
+  Room_BE302                 51.0 x   86.0
+  Room_BE304                 51.0 x   86.0
+  Library_Elem               51.0 x   86.0
+  InternetSection            51.0 x   86.0
+  StudentLounge              51.0 x   86.0

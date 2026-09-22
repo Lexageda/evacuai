@@ -8,163 +8,253 @@
 <style>
  .page-wrap { max-width:1100px; margin:0 auto; padding:24px 20px; }
  .top-bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
- .top-bar h2 { font-size:18px; font-weight:800; color:var(--green-dark); }
  .top-bar .spacer { flex:1; }
-
- /* CSV upload area */
  .csv-drop { border:2px dashed var(--border); border-radius:var(--radius); padding:20px; text-align:center; background:#fafaf7; margin-bottom:16px; cursor:pointer; transition:border-color .2s; }
  .csv-drop:hover { border-color:var(--green-mid); }
  .csv-drop p { font-size:13px; color:var(--text-muted); margin-top:6px; }
-
- /* Stats strip */
  .stats-strip { display:flex; gap:14px; margin-bottom:20px; flex-wrap:wrap; }
  .stat-chip { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 18px; text-align:center; min-width:120px; }
  .stat-chip .num { font-size:24px; font-weight:800; color:var(--green-dark); }
  .stat-chip .lbl { font-size:12px; color:var(--text-muted); }
-
- /* Table action buttons */
  .tbl-btn { padding:4px 10px; border-radius:6px; border:none; font-size:12px; font-weight:600; cursor:pointer; transition:opacity .15s; }
  .tbl-btn:hover { opacity:.8; }
  .tbl-edit { background:var(--green-pale); color:var(--green-dark); }
- .tbl-reset { background:var(--amber-pale); color:var(--amber); }
  .tbl-del { background:var(--red-pale); color:var(--red); }
-
- /* CSV format helper */
  .csv-format { background:#f4f8f0; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:12px; color:var(--text-sub); margin-bottom:14px; }
  .csv-format code { display:block; font-family:monospace; margin-top:6px; color:var(--green-dark); font-size:12px; }
+ .tab-bar { display:flex; gap:6px; margin-bottom:20px; border-bottom:2px solid var(--border); }
+ .tab-btn { padding:10px 20px; border:none; background:transparent; font-size:14px; font-weight:600; color:var(--text-muted); cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .15s; }
+ .tab-btn.active { color:var(--green-dark); border-bottom-color:var(--green-mid); }
+ .tab-content { display:none; }
+ .tab-content.active { display:block; }
+ .sched-group { margin-bottom:16px; }
+ .sched-group-title { font-size:13px; font-weight:700; color:var(--green-dark); padding:6px 10px; background:var(--green-pale); border-radius:7px; margin-bottom:6px; }
+ .sched-row { display:grid; grid-template-columns:1.5fr 0.8fr 0.6fr 0.8fr 0.8fr 90px; gap:6px; align-items:center; padding:6px 10px; border-radius:7px; font-size:12px; border:1px solid var(--border); margin-bottom:4px; }
+ .sched-row:hover { background:var(--green-pale); }
+ .sched-header { display:grid; grid-template-columns:1.5fr 0.8fr 0.6fr 0.8fr 0.8fr 90px; gap:6px; padding:4px 10px; font-size:11px; font-weight:700; color:var(--text-muted); }
 </style>
 </head>
 <body>
 
 <nav class="navbar">
  <div class="navbar-brand">
- <div class="navbar-logo"></div>
- <div><div class="navbar-title">EvacuAI</div><div class="navbar-subtitle">Cebu Evacuation System</div></div>
+  <div class="navbar-logo">EA</div>
+  <div><div class="navbar-title">EvacuAI</div><div class="navbar-subtitle">Admin Dashboard</div></div>
  </div>
  <div class="navbar-links">
- <a href="/admin"> Dashboard</a>
- <a href="/admin/students" class="active"> Students</a>
- <a href="/profile" style="font-size:13px;color:var(--text-sub);font-weight:500;"> {{ name }}</a>
- <span class="badge badge-admin">Admin</span>
- <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
+  <a href="/admin">Dashboard</a>
+  <a href="/admin/students" class="active">Students</a>
+  <a href="/profile">Profile</a>
+  <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
  </div>
 </nav>
 
 <div class="page-wrap">
 
- <!-- Stats strip -->
  <div class="stats-strip">
- <div class="stat-chip"><div class="num" id="stat-students">—</div><div class="lbl">Total Students</div></div>
- <div class="stat-chip"><div class="num" id="stat-admins">—</div><div class="lbl">Admins / Officers</div></div>
- <div class="stat-chip"><div class="num" id="stat-temp">—</div><div class="lbl">Temp Passwords</div></div>
+  <div class="stat-chip"><div class="num" id="stat-students">—</div><div class="lbl">Total Students</div></div>
+  <div class="stat-chip"><div class="num" id="stat-admins">—</div><div class="lbl">Admins / Officers</div></div>
+  <div class="stat-chip"><div class="num" id="stat-temp">—</div><div class="lbl">Temp Passwords</div></div>
+  <div class="stat-chip"><div class="num" id="stat-scheds">—</div><div class="lbl">Schedule Entries</div></div>
  </div>
 
- <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
-
- <!-- LEFT: Student table -->
- <div>
- <div class="card">
- <div class="top-bar" style="margin-bottom:14px;">
- <div class="card-title" style="margin-bottom:0;"> All Accounts</div>
- <div class="spacer"></div>
- <div class="search-bar" style="width:200px;">
- <input type="text" id="search-input" placeholder="Search name or ID…" oninput="filterTable()">
- </div>
- </div>
- <div class="table-wrap">
- <table class="data-table" id="student-table">
- <thead>
- <tr>
- <th>Student ID</th>
- <th>Name</th>
- <th>Role</th>
- <th>Password</th>
- <th>Actions</th>
- </tr>
- </thead>
- <tbody id="student-tbody">
- <tr><td colspan="5" class="empty">Loading…</td></tr>
- </tbody>
- </table>
- </div>
- </div>
+ <div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('accounts')">👥 Accounts</button>
+  <button class="tab-btn" onclick="switchTab('schedules')">📅 Schedules</button>
  </div>
 
- <!-- RIGHT: Add + CSV -->
- <div style="display:flex;flex-direction:column;gap:16px;">
+ <!-- Tab: Accounts -->
+ <div class="tab-content active" id="tab-accounts">
+  <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
+   <div class="card">
+    <div class="top-bar" style="margin-bottom:14px;">
+     <div class="card-title" style="margin-bottom:0;">All Accounts</div>
+     <div class="spacer"></div>
+     <div class="search-bar" style="width:200px;">
+      <input type="text" id="search-input" placeholder="Search name or ID…" oninput="filterTable()">
+     </div>
+    </div>
+    <div class="table-wrap">
+     <table class="data-table">
+      <thead>
+       <tr>
+        <th>Student ID</th><th>Name</th><th>Role</th><th>Password</th><th>Actions</th>
+       </tr>
+      </thead>
+      <tbody id="student-tbody">
+       <tr><td colspan="5" class="empty">Loading…</td></tr>
+      </tbody>
+     </table>
+    </div>
+   </div>
 
- <!-- Add single student -->
- <div class="card">
- <div class="card-title">+ Add Student</div>
- <div class="form-group">
- <label>Student ID <span style="color:var(--red);font-size:11px;">*</span></label>
- <input type="text" id="add-sid" placeholder="e.g. 2024-00123" style="text-transform:uppercase;">
- </div>
- <div class="form-group">
- <label>Full Name <span style="color:var(--red);font-size:11px;">*</span></label>
- <input type="text" id="add-name" placeholder="Juan Dela Cruz">
- </div>
- <div class="form-group">
- <label>Role</label>
- <select id="add-role">
- <option value="student">Student</option>
- <option value="admin">Admin / Safety Officer</option>
- </select>
- </div>
- <div style="font-size:12px;color:var(--text-muted);background:var(--green-pale);padding:8px 10px;border-radius:8px;margin-bottom:12px;"> Password is auto-generated: <strong>uc@</strong> + last 6 digits of ID<br> e.g. ID <code>24218364</code> → Password <code>uc@218364</code>
- </div>
- <button class="btn btn-primary btn-full" onclick="addStudent()">+Add Account</button>
+   <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="card">
+     <div class="card-title">+ Add Student</div>
+     <div class="form-group">
+      <label>Student ID <span style="color:var(--red);font-size:11px;">*</span></label>
+      <input type="text" id="add-sid" placeholder="e.g. 24218364">
+     </div>
+     <div class="form-group">
+      <label>Full Name <span style="color:var(--red);font-size:11px;">*</span></label>
+      <input type="text" id="add-name" placeholder="Juan Dela Cruz">
+     </div>
+     <div class="form-group">
+      <label>Role</label>
+      <select id="add-role">
+       <option value="student">Student</option>
+       <option value="teacher">Teacher</option>
+       <option value="staff">Staff</option>
+       <option value="admin">Admin / Safety Officer</option>
+      </select>
+     </div>
+     <div style="font-size:12px;color:var(--text-muted);background:var(--green-pale);padding:8px 10px;border-radius:8px;margin-bottom:12px;">
+      Password auto-generated: <strong>uc@</strong> + last 6 digits of ID
+     </div>
+     <button class="btn btn-primary btn-full" onclick="addStudent()">+ Add Account</button>
+    </div>
+
+    <div class="card">
+     <div class="card-title">Upload CSV</div>
+     <div class="csv-format">
+      CSV columns: <code>student_id,name,role</code>
+      <code>24218364,Juan Dela Cruz,student</code>
+     </div>
+     <div class="csv-drop" onclick="document.getElementById('csv-file').click()">
+      Click to choose CSV file
+      <p id="csv-file-name">No file chosen</p>
+     </div>
+     <input type="file" id="csv-file" accept=".csv" style="display:none;" onchange="onCSVSelected()">
+     <textarea id="csv-preview" style="min-height:80px;font-family:monospace;font-size:12px;margin-bottom:10px;display:none;" placeholder="Or paste CSV content here…"></textarea>
+     <button class="btn btn-outline btn-full" onclick="showPasteArea()" style="margin-bottom:8px;">Or paste CSV</button>
+     <button class="btn btn-primary btn-full" onclick="uploadCSV()">Upload & Create Accounts</button>
+    </div>
+   </div>
+  </div>
  </div>
 
- <!-- CSV upload -->
- <div class="card">
- <div class="card-title">Upload CSV</div>
- <div class="csv-format"> CSV must have these columns in order:
- <code>student_id,name,role</code>
- <div style="margin-top:6px;color:var(--text-muted);"> Password is auto-generated from the ID: <strong>uc@</strong> + last 6 digits</div>
- <code>24218364,Juan Dela Cruz,student</code>
- <code>24305871,Maria Santos,student</code>
- <div style="margin-top:4px;font-size:11px;color:var(--text-muted);">ID: 24218364 → Password: uc@218364</div>
- </div>
- <div class="csv-drop" onclick="document.getElementById('csv-file').click()"> Click to choose CSV file
- <p id="csv-file-name">No file chosen</p>
- </div>
- <input type="file" id="csv-file" accept=".csv" style="display:none;" onchange="onCSVSelected()">
- <textarea id="csv-preview" style="min-height:80px;font-family:monospace;font-size:12px;margin-bottom:10px;display:none;" placeholder="Or paste CSV content here…"></textarea>
- <button class="btn btn-outline btn-full" onclick="showPasteArea()" style="margin-bottom:8px;"> Or paste CSV</button>
- <button class="btn btn-primary btn-full" onclick="uploadCSV()"> Upload & Create Accounts</button>
+ <!-- Tab: Schedules -->
+ <div class="tab-content" id="tab-schedules">
+  <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
+
+   <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+     <div class="card-title" style="margin-bottom:0;">Class Schedules</div>
+     <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <input type="text" id="sched-search" placeholder="Filter by student ID or name…" oninput="filterSchedules()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;width:200px;">
+      <button class="btn btn-primary btn-sm" onclick="openAddSched()">+ Add Entry</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadSchedules()">Refresh</button>
+     </div>
+    </div>
+    <div id="sched-container">
+     <div class="empty">Loading schedules...</div>
+    </div>
+   </div>
+
+   <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="card">
+     <div class="card-title">Upload Schedule (Excel)</div>
+     <div class="csv-format">
+      Excel columns:
+      <code>student_id, subject, room, day, time_start, time_end</code>
+      <div style="margin-top:6px;color:var(--text-muted);">Day: MWF, TTH, MW, S, etc. | Time: 24-hour format</div>
+      <code>24218364, Math, BE208, MWF, 08:00, 09:30</code>
+      <code>24218364, Evening, BE208, MWF, 19:00, 21:00</code>
+     </div>
+     <div class="csv-drop" onclick="document.getElementById('sched-file').click()">
+      Click to choose Excel file (.xlsx)
+      <p id="sched-file-name">No file chosen</p>
+     </div>
+     <input type="file" id="sched-file" accept=".xlsx" style="display:none;" onchange="onSchedSelected()">
+     <div style="display:flex;gap:8px;margin-top:8px;">
+      <button class="btn btn-primary btn-full" onclick="uploadSchedule()">Upload Schedule</button>
+      <button class="btn btn-ghost" onclick="clearSchedule()" style="white-space:nowrap;">Clear All</button>
+     </div>
+     <div id="sched-result" style="margin-top:8px;font-size:13px;display:none;padding:8px 10px;border-radius:8px;"></div>
+    </div>
+
+    <div class="card">
+     <div class="card-title">Quick Add Entry</div>
+     <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Add a single schedule entry without uploading a file.</p>
+     <button class="btn btn-primary btn-full" onclick="openAddSched()">+ Add Single Entry</button>
+    </div>
+   </div>
+
+  </div>
  </div>
 
- </div>
+</div>
+
+<!-- Edit Account Modal -->
+<div class="modal-overlay" id="edit-modal">
+ <div class="modal-box">
+  <div class="modal-title">Edit Account</div>
+  <input type="hidden" id="edit-uid">
+  <div class="form-group"><label>Full Name</label><input type="text" id="edit-name"></div>
+  <div class="form-group">
+   <label>Role</label>
+   <select id="edit-role">
+    <option value="student">Student</option>
+    <option value="teacher">Teacher</option>
+    <option value="staff">Staff</option>
+    <option value="admin">Admin / Safety Officer</option>
+   </select>
+  </div>
+  <div class="form-group">
+   <label>Reset Password <span style="color:var(--text-muted);font-weight:400;">(leave blank to keep current)</span></label>
+   <input type="text" id="edit-pw" placeholder="New temporary password">
+  </div>
+  <div class="modal-actions">
+   <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+   <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
+  </div>
  </div>
 </div>
 
-<!--Edit modal -->
-<div class="modal-overlay" id="edit-modal">
+<!-- Edit Schedule Modal -->
+<div class="modal-overlay" id="sched-modal">
  <div class="modal-box">
- <div class="modal-title">Edit Account</div>
- <input type="hidden" id="edit-uid">
- <div class="form-group"><label>Full Name</label><input type="text" id="edit-name"></div>
- <div class="form-group"><label>Role</label>
- <select id="edit-role">
- <option value="student">Student</option>
- <option value="admin">Admin / Safety Officer</option>
- </select>
- </div>
- <div class="form-group">
- <label>Reset Password <span style="color:var(--text-muted);font-weight:400;">(leave blank to keep current)</span></label>
- <input type="text" id="edit-pw" placeholder="New temporary password">
- </div>
- <div class="modal-actions">
- <button class="btn btn-primary" onclick="saveEdit()">Save</button>
- <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
- </div>
+  <div class="modal-title" id="sched-modal-title">Add Schedule Entry</div>
+  <input type="hidden" id="sched-edit-id">
+  <div class="form-group">
+   <label>Student ID <span style="color:var(--red);font-size:11px;">*</span></label>
+   <input type="text" id="sched-sid" placeholder="e.g. 24218364">
+  </div>
+  <div class="form-group">
+   <label>Subject <span style="color:var(--red);font-size:11px;">*</span></label>
+   <input type="text" id="sched-subject" placeholder="e.g. Mathematics">
+  </div>
+  <div class="form-group">
+   <label>Room <span style="color:var(--red);font-size:11px;">*</span></label>
+   <input type="text" id="sched-room" placeholder="e.g. BE208">
+  </div>
+  <div class="form-group">
+   <label>Day <span style="color:var(--red);font-size:11px;">*</span></label>
+   <input type="text" id="sched-day" placeholder="e.g. MWF, TTH, S">
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+   <div class="form-group">
+    <label>Time Start (24hr)</label>
+    <input type="text" id="sched-start" placeholder="e.g. 08:00 or 19:00">
+   </div>
+   <div class="form-group">
+    <label>Time End (24hr)</label>
+    <input type="text" id="sched-end" placeholder="e.g. 09:30 or 21:00">
+   </div>
+  </div>
+  <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Times display as AM/PM but must be entered in 24-hour format.</div>
+  <div class="modal-actions">
+   <button class="btn btn-primary" onclick="saveSched()">Save</button>
+   <button class="btn btn-ghost" onclick="closeSchedModal()">Cancel</button>
+  </div>
  </div>
 </div>
 
 <div id="toast"></div>
 
-<script> var allUsers = [];
+<script>
+var allUsers = [];
+var allSchedules = [];
 
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function toast(msg,isError){
@@ -176,21 +266,40 @@ function doLogout(){
  fetch('/api/logout',{method:'POST'}).catch(function(){}).finally(function(){window.location.href='/logout';});
 }
 
-// Load students 
+// ── Format time 24hr → 12hr AM/PM ─────────────────────────────────────────────
+function formatTime(t){
+ if(!t) return '';
+ var parts = t.split(':');
+ var h = parseInt(parts[0]);
+ var m = parts[1] || '00';
+ var ampm = h >= 12 ? 'PM' : 'AM';
+ h = h % 12 || 12;
+ return h + ':' + m + ' ' + ampm;
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(tab){
+ document.querySelectorAll('.tab-content').forEach(function(el){ el.classList.remove('active'); });
+ document.querySelectorAll('.tab-btn').forEach(function(el){ el.classList.remove('active'); });
+ document.getElementById('tab-'+tab).classList.add('active');
+ event.target.classList.add('active');
+ if(tab === 'schedules') loadSchedules();
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────────
 function loadUsers(){
  fetch('/api/users').then(function(r){
- if(!r.ok)return null; return r.json();
+  if(!r.ok)return null; return r.json();
  }).then(function(list){
- if(!list)return;
- allUsers=list;
- renderTable(list);
- // Stats
- var students=list.filter(function(u){return u.role==='student';}).length;
- var admins=list.length-students;
- var temp=list.filter(function(u){return u.must_change_pw;}).length;
- document.getElementById('stat-students').textContent=students;
- document.getElementById('stat-admins').textContent=admins;
- document.getElementById('stat-temp').textContent=temp;
+  if(!list)return;
+  allUsers=list;
+  renderTable(list);
+  var students=list.filter(function(u){return u.role==='student';}).length;
+  var admins=list.filter(function(u){return u.role==='admin';}).length;
+  var temp=list.filter(function(u){return u.must_change_pw;}).length;
+  document.getElementById('stat-students').textContent=students;
+  document.getElementById('stat-admins').textContent=admins;
+  document.getElementById('stat-temp').textContent=temp;
  }).catch(function(e){console.error(e);});
 }
 
@@ -198,59 +307,48 @@ function renderTable(list){
  var tbody=document.getElementById('student-tbody');
  if(!list.length){tbody.innerHTML='<tr><td colspan="5" class="empty">No accounts yet.</td></tr>';return;}
  tbody.innerHTML=list.map(function(u){
- return '<tr id="row-'+u.id+'">'+
- '<td><code style="font-size:12px;">'+escHtml(u.student_id||'—')+'</code></td>'+
- '<td>'+escHtml(u.name)+'</td>'+
- '<td><span class="badge '+(u.role==='admin'?'badge-admin':'badge-student')+'">'+escHtml(u.role)+'</span></td>'+
- '<td>'+(u.must_change_pw?'<span class="badge badge-pending">Temp</span>':'<span class="badge badge-active">Set</span>')+'</td>'+
- '<td style="display:flex;gap:6px;flex-wrap:wrap;">'+
- '<button class="tbl-btn tbl-edit" onclick="openEdit('+u.id+',\''+escHtml(u.name).replace(/\'/g,'&#39;')+'\',\''+u.role+'\')">Edit</button>'+
- '<button class="tbl-btn tbl-del" onclick="deleteUser('+u.id+',\''+escHtml(u.name)+'\')" '+(u.role==='admin'&&list.filter(function(x){return x.role==='admin';}).length<=1?'disabled title="Cannot delete last admin"':'')+'>Delete</button>'+
- '</td>'+
- '</tr>';
+  return '<tr id="row-'+u.id+'">'+
+   '<td><code style="font-size:12px;">'+escHtml(u.student_id||'—')+'</code></td>'+
+   '<td>'+escHtml(u.name)+'</td>'+
+   '<td><span class="badge '+(u.role==='admin'?'badge-admin':'badge-student')+'">'+escHtml(u.role)+'</span></td>'+
+   '<td>'+(u.must_change_pw?'<span class="badge badge-pending">Temp</span>':'<span class="badge badge-active">Set</span>')+'</td>'+
+   '<td style="display:flex;gap:6px;flex-wrap:wrap;">'+
+    '<button class="tbl-btn tbl-edit" onclick="openEdit('+u.id+',\''+escHtml(u.name).replace(/\'/g,'&#39;')+'\',\''+u.role+'\')">Edit</button>'+
+    '<button class="tbl-btn tbl-del" onclick="deleteUser('+u.id+',\''+escHtml(u.name)+'\')" '+(u.role==='admin'&&list.filter(function(x){return x.role==='admin';}).length<=1?'disabled title="Cannot delete last admin"':'')+'>Delete</button>'+
+   '</td>'+
+   '</tr>';
  }).join('');
 }
 
 function filterTable(){
  var q=document.getElementById('search-input').value.toLowerCase();
- var filtered=allUsers.filter(function(u){
- return u.name.toLowerCase().includes(q)||(u.student_id||'').toLowerCase().includes(q);
- });
- renderTable(filtered);
+ renderTable(allUsers.filter(function(u){
+  return u.name.toLowerCase().includes(q)||(u.student_id||'').toLowerCase().includes(q);
+ }));
 }
 
-// Password generator: uc@ + last 6 digits of ID 
-function genPassword(sid){
- var digits = sid.replace(/\D/g,''); // strip non-digits
- return 'uc@' + digits.slice(-6);
-}
+function genPassword(sid){ return 'uc@'+sid.replace(/\D/g,'').slice(-6); }
+function validID(sid){ return /^\d{8}$/.test(sid); }
 
-// Validate 8-digit ID 
-function validID(sid){
- return /^\d{8}$/.test(sid);
-}
-
-// Add single student 
 function addStudent(){
- var sid = document.getElementById('add-sid').value.trim();
- var name = document.getElementById('add-name').value.trim();
- var role = document.getElementById('add-role').value;
+ var sid=document.getElementById('add-sid').value.trim();
+ var name=document.getElementById('add-name').value.trim();
+ var role=document.getElementById('add-role').value;
  if(!sid||!name){toast('Student ID and name are required.',true);return;}
- if(!validID(sid)){toast('Student ID must be exactly 8 digits (e.g. 24218364).',true);return;}
- var pw = genPassword(sid);
+ if(!validID(sid)){toast('Student ID must be exactly 8 digits.',true);return;}
+ var pw=genPassword(sid);
  fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},
- body:JSON.stringify({student_id:sid,name:name,password:pw,role:role})
+  body:JSON.stringify({student_id:sid,name:name,password:pw,role:role})
  }).then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
  .then(function(res){
- if(!res.ok){toast(res.d.error,true);return;}
- toast('Account created! ID: '+sid+' | Temp password: '+pw);
- document.getElementById('add-sid').value='';
- document.getElementById('add-name').value='';
- loadUsers();
+  if(!res.ok){toast(res.d.error,true);return;}
+  toast('Account created! ID: '+sid+' | Temp password: '+pw);
+  document.getElementById('add-sid').value='';
+  document.getElementById('add-name').value='';
+  loadUsers();
  });
 }
 
-// CSV upload 
 function showPasteArea(){
  var ta=document.getElementById('csv-preview');
  ta.style.display=ta.style.display==='none'?'block':'none';
@@ -262,8 +360,8 @@ function onCSVSelected(){
  document.getElementById('csv-file-name').textContent=file.name;
  var reader=new FileReader();
  reader.onload=function(e){
- document.getElementById('csv-preview').value=e.target.result;
- document.getElementById('csv-preview').style.display='block';
+  document.getElementById('csv-preview').value=e.target.result;
+  document.getElementById('csv-preview').style.display='block';
  };
  reader.readAsText(file);
 }
@@ -272,19 +370,18 @@ function uploadCSV(){
  var csv=document.getElementById('csv-preview').value.trim();
  if(!csv){toast('Please select a CSV file or paste CSV content.',true);return;}
  fetch('/api/users/upload-csv',{method:'POST',headers:{'Content-Type':'application/json'},
- body:JSON.stringify({csv:csv})
+  body:JSON.stringify({csv:csv})
  }).then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
  .then(function(res){
- if(!res.ok){toast(res.d.error,true);return;}
- toast(res.d.message);
- document.getElementById('csv-preview').value='';
- document.getElementById('csv-preview').style.display='none';
- document.getElementById('csv-file-name').textContent='No file chosen';
- loadUsers();
+  if(!res.ok){toast(res.d.error,true);return;}
+  toast(res.d.message);
+  document.getElementById('csv-preview').value='';
+  document.getElementById('csv-preview').style.display='none';
+  document.getElementById('csv-file-name').textContent='No file chosen';
+  loadUsers();
  });
 }
 
-//Edit user 
 function openEdit(id,name,role){
  document.getElementById('edit-uid').value=id;
  document.getElementById('edit-name').value=name;
@@ -294,39 +391,199 @@ function openEdit(id,name,role){
 }
 function closeEditModal(){ document.getElementById('edit-modal').classList.remove('show'); }
 function saveEdit(){
- var id =document.getElementById('edit-uid').value;
+ var id=document.getElementById('edit-uid').value;
  var name=document.getElementById('edit-name').value.trim();
  var role=document.getElementById('edit-role').value;
- var pw =document.getElementById('edit-pw').value.trim();
+ var pw=document.getElementById('edit-pw').value.trim();
  if(!name){toast('Name is required.',true);return;}
  var body={name:name,role:role};
  if(pw)body.password=pw;
  fetch('/api/users/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
  .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
  .then(function(res){
- if(!res.ok){toast(res.d.error,true);return;}
- toast('Account updated.');
- closeEditModal();
- loadUsers();
+  if(!res.ok){toast(res.d.error,true);return;}
+  toast('Account updated.');closeEditModal();loadUsers();
  });
 }
 
-//Delete user 
 function deleteUser(id,name){
- if(!confirm('Delete account for '+name+'? This will also remove all their reports and safety data.'))return;
+ if(!confirm('Delete account for '+name+'?'))return;
  fetch('/api/users/'+id,{method:'DELETE'})
  .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
  .then(function(res){
- if(!res.ok){toast(res.d.error,true);return;}
- toast('Account deleted.');
- loadUsers();
+  if(!res.ok){toast(res.d.error,true);return;}
+  toast('Account deleted.');loadUsers();
  });
 }
 
-// Init 
+// ── Schedule viewer ───────────────────────────────────────────────────────────
+function loadSchedules(){
+ fetch('/api/schedule/all').then(function(r){return r.json();}).then(function(list){
+  allSchedules = list;
+  document.getElementById('stat-scheds').textContent = list.length;
+  renderSchedules(list);
+ }).catch(function(){
+  document.getElementById('sched-container').innerHTML='<div class="empty">No schedules uploaded yet.</div>';
+ });
+}
+
+function filterSchedules(){
+ var q = document.getElementById('sched-search').value.toLowerCase();
+ renderSchedules(allSchedules.filter(function(s){
+  return s.student_id.toLowerCase().includes(q)||(s.student_name||'').toLowerCase().includes(q);
+ }));
+}
+
+function renderSchedules(list){
+ var container = document.getElementById('sched-container');
+ if(!list.length){ container.innerHTML='<div class="empty">No schedules found.</div>'; return; }
+ var groups = {};
+ list.forEach(function(s){
+  if(!groups[s.student_id]) groups[s.student_id]={name:s.student_name||s.student_id,entries:[]};
+  groups[s.student_id].entries.push(s);
+ });
+ var html = '';
+ Object.keys(groups).forEach(function(sid){
+  var g = groups[sid];
+  html += '<div class="sched-group">';
+  html += '<div class="sched-group-title">'+escHtml(sid)+' — '+escHtml(g.name)+'</div>';
+  html += '<div class="sched-header"><span>Subject</span><span>Room</span><span>Day</span><span>Start</span><span>End</span><span></span></div>';
+  g.entries.forEach(function(s){
+   var sid_esc  = escHtml(s.student_id);
+   var subj_esc = escHtml(s.subject).replace(/'/g,"&#39;");
+   var room_esc = escHtml(s.room).replace(/'/g,"&#39;");
+   var day_esc  = escHtml(s.day).replace(/'/g,"&#39;");
+   var ts_esc   = escHtml(s.time_start).replace(/'/g,"&#39;");
+   var te_esc   = escHtml(s.time_end).replace(/'/g,"&#39;");
+   html += '<div class="sched-row">'+
+    '<span>'+escHtml(s.subject)+'</span>'+
+    '<span>'+escHtml(s.room)+'</span>'+
+    '<span>'+escHtml(s.day)+'</span>'+
+    '<span>'+formatTime(s.time_start)+'</span>'+
+    '<span>'+formatTime(s.time_end)+'</span>'+
+    '<span style="display:flex;gap:4px;">'+
+     '<button class="tbl-btn tbl-edit" onclick="openEditSched('+s.id+',\''+sid_esc+'\',\''+subj_esc+'\',\''+room_esc+'\',\''+day_esc+'\',\''+ts_esc+'\',\''+te_esc+'\')">Edit</button>'+
+     '<button class="tbl-btn tbl-del" onclick="deleteSched('+s.id+')">Del</button>'+
+    '</span>'+
+   '</div>';
+  });
+  html += '</div>';
+ });
+ container.innerHTML = html;
+}
+
+function openAddSched(){
+ document.getElementById('sched-modal-title').textContent = 'Add Schedule Entry';
+ document.getElementById('sched-edit-id').value = '';
+ document.getElementById('sched-sid').value = '';
+ document.getElementById('sched-subject').value = '';
+ document.getElementById('sched-room').value = '';
+ document.getElementById('sched-day').value = '';
+ document.getElementById('sched-start').value = '';
+ document.getElementById('sched-end').value = '';
+ document.getElementById('sched-sid').disabled = false;
+ document.getElementById('sched-modal').classList.add('show');
+}
+
+function openEditSched(id,sid,subject,room,day,start,end){
+ document.getElementById('sched-modal-title').textContent = 'Edit Schedule Entry';
+ document.getElementById('sched-edit-id').value = id;
+ document.getElementById('sched-sid').value = sid;
+ document.getElementById('sched-subject').value = subject;
+ document.getElementById('sched-room').value = room;
+ document.getElementById('sched-day').value = day;
+ document.getElementById('sched-start').value = start;
+ document.getElementById('sched-end').value = end;
+ document.getElementById('sched-sid').disabled = true;
+ document.getElementById('sched-modal').classList.add('show');
+}
+
+function closeSchedModal(){
+ document.getElementById('sched-modal').classList.remove('show');
+}
+
+function saveSched(){
+ var id      = document.getElementById('sched-edit-id').value;
+ var sid     = document.getElementById('sched-sid').value.trim();
+ var subject = document.getElementById('sched-subject').value.trim();
+ var room    = document.getElementById('sched-room').value.trim();
+ var day     = document.getElementById('sched-day').value.trim();
+ var start   = document.getElementById('sched-start').value.trim();
+ var end     = document.getElementById('sched-end').value.trim();
+ if(!subject||!room||!day||!start||!end){toast('All fields are required.',true);return;}
+ if(id){
+  fetch('/api/schedule/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({subject:subject,room:room,day:day,time_start:start,time_end:end})
+  }).then(function(r){return r.json();}).then(function(d){
+   if(d.error){toast(d.error,true);return;}
+   toast('Schedule updated.');closeSchedModal();loadSchedules();
+  });
+ } else {
+  if(!sid){toast('Student ID is required.',true);return;}
+  fetch('/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({student_id:sid,subject:subject,room:room,day:day,time_start:start,time_end:end})
+  }).then(function(r){return r.json();}).then(function(d){
+   if(d.error){toast(d.error,true);return;}
+   toast('Schedule entry added.');closeSchedModal();loadSchedules();
+  });
+ }
+}
+
+function deleteSched(id){
+ if(!confirm('Delete this schedule entry?'))return;
+ fetch('/api/schedule/'+id,{method:'DELETE'}).then(function(r){return r.json();}).then(function(d){
+  if(d.error){toast(d.error,true);return;}
+  toast('Schedule deleted.');loadSchedules();
+ });
+}
+
+function onSchedSelected(){
+ var file = document.getElementById('sched-file').files[0];
+ if(!file) return;
+ document.getElementById('sched-file-name').textContent = file.name;
+}
+
+function uploadSchedule(){
+ var file = document.getElementById('sched-file').files[0];
+ if(!file){ toast('Please select an Excel file first.', true); return; }
+ var reader = new FileReader();
+ reader.onload = function(e){
+  var bytes = new Uint8Array(e.target.result);
+  var binary = '';
+  bytes.forEach(function(b){ binary += String.fromCharCode(b); });
+  var b64 = btoa(binary);
+  fetch('/api/schedule/upload',{
+   method:'POST',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({file: b64})
+  }).then(function(r){return r.json();}).then(function(d){
+   var el = document.getElementById('sched-result');
+   el.style.display = 'block';
+   if(d.error){
+    el.style.background='var(--red-pale)';el.style.color='var(--red)';
+    el.textContent = d.error;
+   } else {
+    el.style.background='var(--green-pale)';el.style.color='var(--green-dark)';
+    el.textContent = d.message;
+    loadSchedules();
+   }
+   document.getElementById('sched-file-name').textContent='No file chosen';
+   document.getElementById('sched-file').value='';
+  }).catch(function(){ toast('Upload failed.', true); });
+ };
+ reader.readAsArrayBuffer(file);
+}
+
+function clearSchedule(){
+ if(!confirm('Clear ALL schedules? This cannot be undone.')) return;
+ fetch('/api/schedule/clear',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+  toast(d.message||d.error);
+  loadSchedules();
+ });
+}
+
 loadUsers();
-// Refresh every 30s in case another admin makes changes
-setInterval(loadUsers,30000);
+setInterval(loadUsers, 30000);
 </script>
 </body>
 </html>
