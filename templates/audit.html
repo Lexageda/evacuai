@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvacuAI — Audit Log</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.page-wrap { max-width:960px; margin:0 auto; padding:24px 20px; }
+.audit-table { width:100%; border-collapse:collapse; font-size:13px; }
+.audit-table th { text-align:left; padding:8px 12px; font-size:11px; font-weight:700; color:var(--text-muted); border-bottom:2px solid var(--border); background:var(--surface); position:sticky; top:0; z-index:1; }
+.audit-table td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+.audit-table tr:last-child td { border-bottom:none; }
+.audit-table tr:hover td { background:var(--green-pale); }
+.action-chip { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; white-space:nowrap; }
+.chip-alert    { background:#fff3e0; color:#e65100; }
+.chip-sos      { background:#ffebee; color:#c62828; }
+.chip-room     { background:#e8eaf6; color:#283593; }
+.chip-user     { background:#e8f5e9; color:#1b5e20; }
+.chip-drill    { background:#e8eef8; color:#1a3f7a; }
+.chip-safety   { background:#f3e5f5; color:#6a1b9a; }
+.chip-other    { background:#f5f5f5; color:#424242; }
+.filter-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+.filter-btn { padding:5px 12px; border-radius:6px; border:1.5px solid var(--border); background:transparent; font-size:12px; font-weight:600; cursor:pointer; color:var(--text-sub); transition:all .15s; }
+.filter-btn.active { background:var(--green-mid); color:#fff; border-color:var(--green-mid); }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <div class="navbar-brand">
+    <div class="navbar-logo">EA</div>
+    <div><div class="navbar-title">EvacuAI</div><div class="navbar-subtitle">Audit Log</div></div>
+  </div>
+  <div class="navbar-links">
+    <a href="/admin">Dashboard</a>
+    <a href="/admin/students">Students</a>
+    <a href="/admin/drill">Drill Mode</a>
+    <a href="/admin/audit" class="active">Audit Log</a>
+    <a href="/admin/analytics">Analytics</a>
+    <a href="/profile">Profile</a>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
+  </div>
+</nav>
+
+<div class="page-wrap">
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+      <div class="card-title" style="margin:0;">Audit Log</div>
+      <button class="btn btn-ghost btn-sm" onclick="loadLog()">Refresh</button>
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Every admin action is automatically recorded here. Newest first.</p>
+
+    <div class="filter-row">
+      <span style="font-size:12px;font-weight:600;color:var(--text-sub);">Filter:</span>
+      <button class="filter-btn active" data-f="all"    onclick="setFilter('all')">All</button>
+      <button class="filter-btn" data-f="alert"  onclick="setFilter('alert')">Alerts</button>
+      <button class="filter-btn" data-f="sos"    onclick="setFilter('sos')">SOS</button>
+      <button class="filter-btn" data-f="room"   onclick="setFilter('room')">Rooms</button>
+      <button class="filter-btn" data-f="user"   onclick="setFilter('user')">Users</button>
+      <button class="filter-btn" data-f="drill"  onclick="setFilter('drill')">Drill</button>
+      <button class="filter-btn" data-f="safety" onclick="setFilter('safety')">Safety</button>
+    </div>
+
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;max-height:520px;overflow-y:auto;">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Action</th>
+            <th>Admin</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="audit-count"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script>
+var allRows = [];
+var currentFilter = 'all';
+
+var ACTION_META = {
+  BROADCAST_ALERT: {label:'📢 Broadcast Alert', chip:'chip-alert'},
+  APPROVE_ALERT:   {label:'✅ Approved Alert',   chip:'chip-alert'},
+  DECLINE_ALERT:   {label:'❌ Declined Alert',   chip:'chip-alert'},
+  EDIT_ALERT:      {label:'✏️ Edited Alert',      chip:'chip-alert'},
+  DELETE_ALERT:    {label:'🗑 Deleted Alert',     chip:'chip-alert'},
+  RESPOND_SOS:     {label:'🚨 Responded SOS',    chip:'chip-sos'},
+  RESOLVE_SOS:     {label:'✅ Resolved SOS',     chip:'chip-sos'},
+  RESET_SAFETY:    {label:'🔄 Reset Safety',     chip:'chip-safety'},
+  MARK_SAFE:       {label:'✅ Marked Safe',       chip:'chip-safety'},
+  SET_ROOM_STATUS: {label:'🔒 Room Status',      chip:'chip-room'},
+  RESET_ROOMS:     {label:'🔄 Reset Rooms',      chip:'chip-room'},
+  ADD_USER:        {label:'👤 Added User',        chip:'chip-user'},
+  EDIT_USER:       {label:'✏️ Edited User',        chip:'chip-user'},
+  DELETE_USER:     {label:'🗑 Deleted User',      chip:'chip-user'},
+  CSV_UPLOAD:      {label:'📥 CSV Upload',        chip:'chip-user'},
+  DRILL_START:     {label:'🔵 Drill Started',    chip:'chip-drill'},
+  DRILL_END:       {label:'🔵 Drill Ended',      chip:'chip-drill'},
+  DELETE_REPORT:   {label:'🗑 Deleted Report',   chip:'chip-other'},
+};
+
+var FILTER_MAP = {
+  alert:  ['BROADCAST_ALERT','APPROVE_ALERT','DECLINE_ALERT','EDIT_ALERT','DELETE_ALERT'],
+  sos:    ['RESPOND_SOS','RESOLVE_SOS'],
+  room:   ['SET_ROOM_STATUS','RESET_ROOMS'],
+  user:   ['ADD_USER','EDIT_USER','DELETE_USER','CSV_UPLOAD'],
+  drill:  ['DRILL_START','DRILL_END'],
+  safety: ['RESET_SAFETY','MARK_SAFE'],
+};
+
+function toast(msg,isError){
+  var e=document.getElementById('toast');
+  e.textContent=msg; e.className='show'+(isError?' error':'');
+  setTimeout(function(){e.className=''},3000);
+}
+function doLogout(){fetch('/api/logout',{method:'POST'}).finally(function(){window.location.href='/logout'});}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function setFilter(f){
+  currentFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.f===f);
+  });
+  renderTable();
+}
+
+function renderTable(){
+  var rows = allRows;
+  if(currentFilter!=='all' && FILTER_MAP[currentFilter]){
+    rows = allRows.filter(function(r){ return FILTER_MAP[currentFilter].indexOf(r.action)!==-1; });
+  }
+  var tbody = document.getElementById('audit-tbody');
+  document.getElementById('audit-count').textContent = 'Showing '+rows.length+' of '+allRows.length+' entries';
+  if(!rows.length){
+    tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">No entries for this filter.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(function(r){
+    var meta = ACTION_META[r.action] || {label:r.action, chip:'chip-other'};
+    return '<tr>'+
+      '<td style="color:var(--text-muted);white-space:nowrap;">'+escHtml(r.created_at)+'</td>'+
+      '<td><span class="action-chip '+meta.chip+'">'+meta.label+'</span></td>'+
+      '<td style="white-space:nowrap;">'+escHtml(r.actor_name)+'</td>'+
+      '<td style="color:var(--text-sub);">'+escHtml(r.detail||'—')+'</td>'+
+    '</tr>';
+  }).join('');
+}
+
+function loadLog(){
+  fetch('/api/audit-log?limit=500').then(function(r){return r.json();}).then(function(list){
+    allRows = list;
+    renderTable();
+  }).catch(function(){
+    document.getElementById('audit-tbody').innerHTML='<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--red);">Failed to load.</td></tr>';
+  });
+}
+
+loadLog();
+</script>
+</body>
+</html>

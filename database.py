@@ -24,7 +24,8 @@ def init_db():
             student_id     TEXT UNIQUE,
             password       TEXT NOT NULL,
             role           TEXT NOT NULL DEFAULT 'student',
-            must_change_pw INTEGER NOT NULL DEFAULT 0
+            must_change_pw INTEGER NOT NULL DEFAULT 0,
+            phone          TEXT
         );
         CREATE TABLE IF NOT EXISTS alerts (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,8 +94,48 @@ def init_db():
             time_start  TEXT NOT NULL,
             time_end    TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS notifications (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER,
+            title      TEXT NOT NULL,
+            body       TEXT NOT NULL,
+            type       TEXT NOT NULL DEFAULT 'alert',
+            created_at TEXT NOT NULL,
+            is_read    INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS drill_sessions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_by INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            ended_at   TEXT,
+            is_active  INTEGER NOT NULL DEFAULT 1,
+            scenario   TEXT NOT NULL DEFAULT 'earthquake',
+            notes      TEXT,
+            FOREIGN KEY (started_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL,
+            actor_name TEXT NOT NULL,
+            action     TEXT NOT NULL,
+            detail     TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
     """)
     db.commit()
+    # Migrations for existing databases
+    try:
+        db.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+        db.commit()
+    except Exception:
+        pass
+    try:
+        db.execute("ALTER TABLE drill_sessions ADD COLUMN notes TEXT")
+        db.commit()
+    except Exception:
+        pass
     # Seed default admin
     existing = db.execute("SELECT id FROM users WHERE student_id='ADMIN001'").fetchone()
     if not existing:

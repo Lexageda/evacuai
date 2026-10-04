@@ -63,24 +63,72 @@
 .modal-overlay.show { display:flex; }
 .modal-box { background:#fff; border-radius:12px; padding:24px; width:100%; max-width:420px; box-shadow:0 8px 32px rgba(0,0,0,0.18); }
 .modal-title { font-size:16px; font-weight:700; color:var(--green); margin-bottom:14px; }
+/* Crowd */
+.crowd-floor-row { display:flex; align-items:center; gap:10px; padding:8px 10px; background:#f9f9f7; border-radius:8px; transition:background .4s; }
+.crowd-floor-label { font-size:13px; font-weight:600; min-width:90px; color:var(--text); }
+.crowd-floor-count { font-size:18px; font-weight:800; min-width:32px; text-align:center; }
+.crowd-bar-wrap { flex:1; height:10px; background:#e8e8e4; border-radius:5px; overflow:hidden; }
+.crowd-bar { height:100%; border-radius:5px; transition:width .5s, background .5s; width:0%; }
+.crowd-status { font-size:11px; font-weight:700; min-width:60px; text-align:right; }
+/* Drill Mode */
+.drill-banner { background:linear-gradient(135deg,#1a3f7a,#2a5fa8); color:#fff; border-radius:10px; padding:14px 18px; margin-bottom:14px; display:none; }
+.drill-banner.active { display:block; }
+.drill-banner-title { font-size:15px; font-weight:800; letter-spacing:.5px; margin-bottom:4px; }
+.drill-banner-sub { font-size:12px; opacity:.85; }
+.drill-scenario-btn { padding:8px 14px; border-radius:8px; border:1.5px solid var(--border); background:transparent; font-size:12px; font-weight:600; cursor:pointer; color:var(--text-sub); transition:all .15s; }
+.drill-scenario-btn.active { border-color:#1a3f7a; background:#e8eef8; color:#1a3f7a; }
+.drill-history-item { padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px; font-size:13px; }
+/* Audit Log */
+.audit-row { padding:8px 10px; border-bottom:1px solid var(--border); font-size:12px; display:flex; gap:10px; align-items:flex-start; }
+.audit-row:last-child { border-bottom:none; }
+.audit-time { color:var(--text-muted); min-width:130px; flex-shrink:0; }
+.audit-action { font-weight:700; min-width:130px; color:var(--green); flex-shrink:0; }
+.audit-detail { color:var(--text-sub); flex:1; word-break:break-all; }
+.audit-actor { color:var(--text-muted); font-style:italic; }
+/* Analytics */
+.analytics-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; }
+@media(max-width:600px){ .analytics-grid{grid-template-columns:1fr 1fr} }
+.analytic-tile { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; text-align:center; }
+.analytic-num { font-size:24px; font-weight:800; color:var(--green); }
+.analytic-num.red { color:var(--red); }
+.analytic-num.amber { color:var(--amber); }
+.analytic-lbl { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.bar-chart { display:flex; flex-direction:column; gap:6px; }
+.bc-row { display:flex; align-items:center; gap:8px; font-size:12px; }
+.bc-label { min-width:80px; text-align:right; color:var(--text-sub); flex-shrink:0; }
+.bc-bar-wrap { flex:1; height:14px; background:#eee; border-radius:4px; overflow:hidden; }
+.bc-bar { height:100%; border-radius:4px; background:var(--green-mid); transition:width .5s; }
+.bc-val { min-width:28px; font-weight:700; color:var(--green); }
+/* Tabs for extras */
+.extras-tab-row { display:flex; gap:6px; margin-bottom:14px; border-bottom:2px solid var(--border); padding-bottom:8px; }
+.extras-tab { padding:6px 18px; border-radius:7px 7px 0 0; border:none; background:transparent; font-size:13px; font-weight:600; cursor:pointer; color:var(--text-sub); transition:all .15s; }
+.extras-tab.active { background:var(--green-pale); color:var(--green); border-bottom:2px solid var(--green); }
+.extras-pane { display:none; }
+.extras-pane.show { display:block; }
 </style>
 </head>
 <body>
 
-<nav class="navbar">
-  <div class="navbar-brand">
-    <div class="navbar-logo">EA</div>
-    <div><div class="navbar-title">EvacuAI</div><div class="navbar-subtitle">Admin Dashboard</div></div>
-  </div>
-  <div class="navbar-links">
-    <a href="/admin" class="active">Dashboard</a>
-    <a href="/admin/students">Students</a>
-    <a href="/profile">Profile</a>
-    <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
-  </div>
-</nav>
+<div class="navbar-links">
+  <a href="/admin">Dashboard</a>
+  <a href="/admin/students">Students</a>
+  <a href="/admin/drill">Drill Mode</a>
+  <a href="/admin/audit">Audit Log</a>
+  <a href="/admin/analytics">Analytics</a>
+  <a href="/profile">Profile</a>
+  <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
+</div>
 
 <div class="page-wrap">
+
+  <!-- Active Drill Banner -->
+  <div class="drill-banner" id="drill-live-banner">
+    <div class="drill-banner-title">🔵 EVACUATION DRILL IN PROGRESS</div>
+    <div class="drill-banner-sub" id="drill-live-sub">Scenario: — &nbsp;|&nbsp; Started: —</div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-danger btn-sm" onclick="endDrill()">End Drill Now</button>
+    </div>
+  </div>
 
   <!-- SOS Panel -->
   <div class="alert-panel sos" id="sos-panel">
@@ -199,11 +247,124 @@
       </div>
     </div>
 
+    <!-- Crowd Density -->
+    <div class="card">
+      <div class="card-title">Crowd Density <span class="live-dot"></span></div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Live count of students currently evacuating per floor.</p>
+      <div id="crowd-panel" style="display:flex;flex-direction:column;gap:8px;">
+        <div id="crowd-Ground" class="crowd-floor-row">
+          <span class="crowd-floor-label">Ground Floor</span>
+          <span class="crowd-floor-count" id="crowd-count-Ground">—</span>
+          <div class="crowd-bar-wrap"><div class="crowd-bar" id="crowd-bar-Ground"></div></div>
+          <span class="crowd-status" id="crowd-status-Ground"></span>
+        </div>
+        <div id="crowd-Second" class="crowd-floor-row">
+          <span class="crowd-floor-label">2nd Floor</span>
+          <span class="crowd-floor-count" id="crowd-count-Second">—</span>
+          <div class="crowd-bar-wrap"><div class="crowd-bar" id="crowd-bar-Second"></div></div>
+          <span class="crowd-status" id="crowd-status-Second"></span>
+        </div>
+        <div id="crowd-Third" class="crowd-floor-row">
+          <span class="crowd-floor-label">3rd Floor</span>
+          <span class="crowd-floor-count" id="crowd-count-Third">—</span>
+          <div class="crowd-bar-wrap"><div class="crowd-bar" id="crowd-bar-Third"></div></div>
+          <span class="crowd-status" id="crowd-status-Third"></span>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:10px;">
+        🟢 Low (0–5) &nbsp; 🟡 Moderate (6–15) &nbsp; 🔴 High (16+)
+      </div>
+    </div>
+
     <!-- Hazard Reports -->
     <div class="card">
       <div class="card-title">Hazard Reports</div>
       <div id="reports-list" style="max-height:240px;overflow-y:auto;"></div>
     </div>
+
+    <!-- ══ Admin Extras: Drill / Audit Log / Analytics ═══════════════════════ -->
+    <div class="card full-col">
+      <div class="card-title">Admin Tools</div>
+      <div class="extras-tab-row">
+        <button class="extras-tab active" onclick="switchExtrasTab('drill')"   id="xtab-drill">🔵 Drill Mode</button>
+        <button class="extras-tab"        onclick="switchExtrasTab('audit')"   id="xtab-audit">📋 Audit Log</button>
+        <button class="extras-tab"        onclick="switchExtrasTab('analytics')" id="xtab-analytics">📊 Analytics</button>
+      </div>
+
+      <!-- Drill Mode Pane -->
+      <div class="extras-pane show" id="xpane-drill">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
+          Start a practice evacuation drill. Students will see a <strong>DRILL</strong> banner and go through the full evacuation flow. End the drill to broadcast the all-clear.
+        </p>
+        <div id="drill-start-form">
+          <div class="form-group">
+            <label style="margin-bottom:6px;display:block;">Drill scenario</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="drill-scenario-btn active" data-sc="earthquake" onclick="setDrillScenario('earthquake')">Earthquake</button>
+              <button class="drill-scenario-btn" data-sc="flood" onclick="setDrillScenario('flood')">Flood</button>
+              <button class="drill-scenario-btn" data-sc="fire" onclick="setDrillScenario('fire')">Fire</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Drill notes <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+            <input type="text" id="drill-notes" placeholder="e.g. Monthly fire drill — all floors">
+          </div>
+          <button class="btn btn-primary" onclick="startDrill()" id="btn-start-drill">Start Drill</button>
+        </div>
+        <div id="drill-active-info" style="display:none;background:var(--green-pale);border-radius:8px;padding:12px 16px;margin-bottom:14px;">
+          <div style="font-weight:700;color:var(--green);margin-bottom:4px;">🔵 Drill currently active</div>
+          <div style="font-size:13px;" id="drill-active-detail"></div>
+          <button class="btn btn-danger btn-sm" style="margin-top:10px;" onclick="endDrill()">End Drill</button>
+        </div>
+        <div style="margin-top:18px;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-sub);">Past Drills</div>
+          <div id="drill-history-list" style="max-height:220px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
+      <!-- Audit Log Pane -->
+      <div class="extras-pane" id="xpane-audit">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <p style="font-size:13px;color:var(--text-muted);margin:0;">Every admin action is automatically recorded here.</p>
+          <button class="btn btn-ghost btn-sm" onclick="fetchAuditLog()">Refresh</button>
+        </div>
+        <div style="max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;" id="audit-log-list">
+          <div class="empty" style="padding:20px;text-align:center;">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Analytics Pane -->
+      <div class="extras-pane" id="xpane-analytics">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <p style="font-size:13px;color:var(--text-muted);margin:0;">Summary of system activity and evacuation data.</p>
+          <button class="btn btn-ghost btn-sm" onclick="fetchAnalytics()">Refresh</button>
+        </div>
+        <div class="analytics-grid" id="analytics-tiles">
+          <div class="analytic-tile"><div class="analytic-num" id="an-total">—</div><div class="analytic-lbl">Total Users</div></div>
+          <div class="analytic-tile"><div class="analytic-num" id="an-safe">—</div><div class="analytic-lbl">Marked Safe</div></div>
+          <div class="analytic-tile"><div class="analytic-num red" id="an-unsafe">—</div><div class="analytic-lbl">Not Confirmed</div></div>
+          <div class="analytic-tile"><div class="analytic-num amber" id="an-sos">—</div><div class="analytic-lbl">Total SOS</div></div>
+          <div class="analytic-tile"><div class="analytic-num" id="an-sos-res">—</div><div class="analytic-lbl">SOS Resolved</div></div>
+          <div class="analytic-tile"><div class="analytic-num" id="an-drills">—</div><div class="analytic-lbl">Drills Held</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px;">
+          <div>
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-sub);">Alerts by Type</div>
+            <div class="bar-chart" id="an-alert-types"></div>
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-sub);">Reports per Day (last 7 days)</div>
+            <div class="bar-chart" id="an-reports-days"></div>
+          </div>
+        </div>
+        <div style="margin-top:16px;">
+          <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-sub);">Top Reporters</div>
+          <div class="bar-chart" id="an-top-reporters"></div>
+        </div>
+      </div>
+
+    </div>
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
 
   </div>
 </div>
@@ -236,6 +397,7 @@
 var selectedAlertType = '';
 var roomStatusMap = {};
 var mapLoaded = false;
+var drillScenario = 'earthquake';
 
 var STAIRS_PATHS = {
   'Ground': [
@@ -291,6 +453,7 @@ function doLogout(){fetch('/api/logout',{method:'POST'}).catch(function(){}).fin
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+/* ── Alert Type ─── */
 function setAType(t){
   selectedAlertType = t;
   document.querySelectorAll('.atype').forEach(function(b){
@@ -320,6 +483,7 @@ function broadcastAlert(){
     });
 }
 
+/* ── Map ─── */
 function toggleMap(){
   var floors = document.getElementById('map-floors');
   var icon   = document.getElementById('map-toggle-icon');
@@ -371,6 +535,7 @@ function refreshMapColors(){
   });
 }
 
+/* ── Room Status Toggles ─── */
 function switchRsTab(tab){
   document.getElementById('rs-stairs').style.display = tab==='stairs'?'block':'none';
   document.getElementById('rs-rooms').style.display  = tab==='rooms'?'block':'none';
@@ -449,6 +614,7 @@ function loadRoomStatus(){
   }).catch(function(){buildToggles();});
 }
 
+/* ── Alerts ─── */
 function fetchAlerts(){
   fetch('/api/alerts').then(function(r){return r.json();}).then(function(list){
     var el=document.getElementById('alert-history');
@@ -539,6 +705,7 @@ function declineAlert(id){
   });
 }
 
+/* ── Safety ─── */
 function fetchSafety(){
   Promise.all([
     fetch('/api/safety').then(function(r){return r.json();}),
@@ -578,6 +745,7 @@ function resetSafety(){
   });
 }
 
+/* ── SOS ─── */
 function fetchSOS(){
   fetch('/api/sos').then(function(r){return r.json();}).then(function(list){
     var panel=document.getElementById('sos-panel');
@@ -616,6 +784,7 @@ function resolveSOS(id){
   });
 }
 
+/* ── Reports ─── */
 function fetchReports(){
   fetch('/api/reports').then(function(r){return r.json();}).then(function(list){
     var el=document.getElementById('reports-list');
@@ -644,12 +813,221 @@ function delReport(id){
   });
 }
 
+/* ── Crowd ─── */
+function fetchCrowd(){
+  fetch('/api/crowd').then(function(r){return r.json();}).then(function(d){
+    var floors = ['Ground','Second','Third'];
+    var max = Math.max(d.Ground||0, d.Second||0, d.Third||0, 1);
+    floors.forEach(function(f){
+      var count = d[f]||0;
+      var pct   = Math.min(count/max*100,100);
+      var color = count<=5?'#4caf50':count<=15?'#f59e0b':'#e53935';
+      var label = count<=5?'🟢 Low':count<=15?'🟡 Moderate':'🔴 High';
+      document.getElementById('crowd-count-'+f).textContent = count;
+      document.getElementById('crowd-count-'+f).style.color = color;
+      document.getElementById('crowd-bar-'+f).style.width   = pct+'%';
+      document.getElementById('crowd-bar-'+f).style.background = color;
+      document.getElementById('crowd-status-'+f).textContent = label;
+      document.getElementById('crowd-status-'+f).style.color  = color;
+      document.getElementById('crowd-'+f).style.background =
+        count<=5?'#f9f9f7':count<=15?'#fffbea':'#fff5f5';
+    });
+  }).catch(function(){});
+}
+
+/* ── Drill Mode ─── */
+function setDrillScenario(sc){
+  drillScenario = sc;
+  document.querySelectorAll('.drill-scenario-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.sc === sc);
+  });
+}
+
+function startDrill(){
+  var notes = document.getElementById('drill-notes').value.trim();
+  fetch('/api/drill/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:drillScenario,notes:notes})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.error){toast(d.error,true);return;}
+      toast(d.message);
+      document.getElementById('drill-notes').value='';
+      fetchDrillStatus();
+      fetchDrillHistory();
+    });
+}
+
+function endDrill(){
+  if(!confirm('End the drill and send all-clear to students?'))return;
+  fetch('/api/drill/end',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+    if(d.error){toast(d.error,true);return;}
+    toast(d.message);
+    fetchDrillStatus();
+    fetchDrillHistory();
+    fetchAlerts();
+  });
+}
+
+function fetchDrillStatus(){
+  fetch('/api/drill/status').then(function(r){return r.json();}).then(function(d){
+    var banner   = document.getElementById('drill-live-banner');
+    var startForm= document.getElementById('drill-start-form');
+    var activeInfo=document.getElementById('drill-active-info');
+    if(d.active){
+      banner.classList.add('active');
+      document.getElementById('drill-live-sub').textContent='Scenario: '+d.scenario.toUpperCase()+' | Started: '+d.started_at;
+      startForm.style.display='none';
+      activeInfo.style.display='block';
+      document.getElementById('drill-active-detail').textContent='Scenario: '+d.scenario.toUpperCase()+' — Started at '+d.started_at;
+    } else {
+      banner.classList.remove('active');
+      startForm.style.display='block';
+      activeInfo.style.display='none';
+    }
+  }).catch(function(){});
+}
+
+function fetchDrillHistory(){
+  fetch('/api/drill/history').then(function(r){return r.json();}).then(function(list){
+    var el=document.getElementById('drill-history-list');
+    if(!list.length){el.innerHTML='<div class="empty" style="padding:12px;text-align:center;">No drills recorded yet.</div>';return;}
+    el.innerHTML=list.map(function(d){
+      var dur = d.duration_min!==null ? d.duration_min+' min' : (d.is_active?'Active':'—');
+      var statusBadge = d.is_active
+        ? '<span style="background:#e8eef8;color:#1a3f7a;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;">ACTIVE</span>'
+        : '<span style="background:#e8f8ee;color:#1a7a3c;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;">DONE</span>';
+      return '<div class="drill-history-item">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;">'+
+          '<div>'+
+            '<span style="font-weight:700;">'+escHtml(d.scenario.toUpperCase())+'</span> '+statusBadge+
+            '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">By '+escHtml(d.admin_name)+' · '+escHtml(d.started_at)+'</div>'+
+            (d.notes?'<div style="font-size:12px;color:var(--text-sub);margin-top:2px;">'+escHtml(d.notes)+'</div>':'')+
+          '</div>'+
+          '<div style="text-align:right;font-size:12px;color:var(--text-sub);">Duration<br><strong>'+escHtml(dur)+'</strong></div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }).catch(function(){});
+}
+
+/* ── Audit Log ─── */
+var ACTION_LABELS = {
+  BROADCAST_ALERT:'📢 Broadcast Alert',
+  APPROVE_ALERT:  '✅ Approved Alert',
+  DECLINE_ALERT:  '❌ Declined Alert',
+  EDIT_ALERT:     '✏️ Edited Alert',
+  DELETE_ALERT:   '🗑 Deleted Alert',
+  RESPOND_SOS:    '🚨 Responded SOS',
+  RESOLVE_SOS:    '✅ Resolved SOS',
+  RESET_SAFETY:   '🔄 Reset Safety',
+  MARK_SAFE:      '✅ Marked Safe',
+  SET_ROOM_STATUS:'🔒 Room Status',
+  RESET_ROOMS:    '🔄 Reset Rooms',
+  ADD_USER:       '👤 Added User',
+  EDIT_USER:      '✏️ Edited User',
+  DELETE_USER:    '🗑 Deleted User',
+  CSV_UPLOAD:     '📥 CSV Upload',
+  DRILL_START:    '🔵 Drill Started',
+  DRILL_END:      '🔵 Drill Ended',
+  DELETE_REPORT:  '🗑 Deleted Report',
+};
+
+function fetchAuditLog(){
+  fetch('/api/audit-log?limit=100').then(function(r){return r.json();
+}).then(function(list){
+    var el=document.getElementById('audit-log-list');
+    if(!list.length){el.innerHTML='<div class="empty" style="padding:20px;text-align:center;">No audit entries yet.</div>';return;}
+    el.innerHTML=list.map(function(r){
+      var label=ACTION_LABELS[r.action]||r.action;
+      return '<div class="audit-row">'+
+        '<span class="audit-time">'+escHtml(r.created_at)+'</span>'+
+        '<span class="audit-action">'+label+'</span>'+
+        '<span class="audit-actor">'+escHtml(r.actor_name)+'</span>'+
+        '<span class="audit-detail">'+escHtml(r.detail||'')+'</span>'+
+      '</div>';
+    }).join('');
+  }).catch(function(){});
+}
+
+/* ── Analytics ─── */
+function fetchAnalytics(){
+  fetch('/api/analytics').then(function(r){return r.json();}).then(function(d){
+    document.getElementById('an-total').textContent   = d.total_users;
+    document.getElementById('an-safe').textContent    = d.safe_count;
+    document.getElementById('an-unsafe').textContent  = d.unsafe_count;
+    document.getElementById('an-sos').textContent     = d.sos_total;
+    document.getElementById('an-sos-res').textContent = d.sos_resolved;
+    document.getElementById('an-drills').textContent  = d.drills_done;
+
+    // Alerts by type bar chart
+    var typeColors={earthquake:'#e6b800',flood:'#4a90d9',fire:'#e53935',general:'#4caf50'};
+    var typeEl=document.getElementById('an-alert-types');
+    var types=Object.keys(d.alert_by_type);
+    if(!types.length){typeEl.innerHTML='<div class="empty">No alerts yet.</div>';}
+    else{
+      var maxT=Math.max.apply(null,types.map(function(t){return d.alert_by_type[t];}));
+      typeEl.innerHTML=types.map(function(t){
+        var pct=maxT>0?Math.round(d.alert_by_type[t]/maxT*100):0;
+        var col=typeColors[t]||'var(--green-mid)';
+        return '<div class="bc-row">'+
+          '<span class="bc-label">'+escHtml(t)+'</span>'+
+          '<div class="bc-bar-wrap"><div class="bc-bar" style="width:'+pct+'%;background:'+col+'"></div></div>'+
+          '<span class="bc-val" style="color:'+col+'">'+d.alert_by_type[t]+'</span>'+
+        '</div>';
+      }).join('');
+    }
+
+    // Reports per day
+    var repEl=document.getElementById('an-reports-days');
+    var days=d.reports_per_day.slice().reverse();
+    if(!days.length){repEl.innerHTML='<div class="empty">No reports yet.</div>';}
+    else{
+      var maxR=Math.max.apply(null,days.map(function(r){return r.cnt;}));
+      repEl.innerHTML=days.map(function(r){
+        var pct=maxR>0?Math.round(r.cnt/maxR*100):0;
+        return '<div class="bc-row">'+
+          '<span class="bc-label">'+escHtml(r.day.slice(5))+'</span>'+
+          '<div class="bc-bar-wrap"><div class="bc-bar" style="width:'+pct+'%"></div></div>'+
+          '<span class="bc-val">'+r.cnt+'</span>'+
+        '</div>';
+      }).join('');
+    }
+
+    // Top reporters
+    var repTop=document.getElementById('an-top-reporters');
+    if(!d.top_reporters.length){repTop.innerHTML='<div class="empty">No reports yet.</div>';}
+    else{
+      var maxRep=d.top_reporters[0].cnt;
+      repTop.innerHTML=d.top_reporters.map(function(r){
+        var pct=maxRep>0?Math.round(r.cnt/maxRep*100):0;
+        return '<div class="bc-row">'+
+          '<span class="bc-label" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+escHtml(r.name)+'">'+escHtml(r.name)+'</span>'+
+          '<div class="bc-bar-wrap"><div class="bc-bar" style="width:'+pct+'%"></div></div>'+
+          '<span class="bc-val">'+r.cnt+'</span>'+
+        '</div>';
+      }).join('');
+    }
+  }).catch(function(){});
+}
+
+/* ── Extras Tab Switcher ─── */
+function switchExtrasTab(tab){
+  ['drill','audit','analytics'].forEach(function(t){
+    document.getElementById('xtab-'+t).classList.toggle('active', t===tab);
+    document.getElementById('xpane-'+t).classList.toggle('show',  t===tab);
+  });
+  if(tab==='audit')     fetchAuditLog();
+  if(tab==='analytics') fetchAnalytics();
+  if(tab==='drill')     fetchDrillHistory();
+}
+
+/* ── Main refresh loop ─── */
 function refreshAll(){
   fetchAlerts();
   fetchSafety();
   fetchSOS();
   fetchPending();
   fetchReports();
+  fetchCrowd();
+  fetchDrillStatus();
 }
 
 loadRoomStatus();

@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Analytics – EvacuAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --fg: #1e293b;
+  --fg2: #64748b;
+  --accent: #2563eb;
+  --accent2: #7c3aed;
+  --green: #16a34a;
+  --red: #dc2626;
+  --amber: #d97706;
+  --cyan: #0891b2;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --fg: #f1f5f9; --fg2: #94a3b8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f172a; --surface: #1e293b; --border: #334155;
+  --fg: #f1f5f9; --fg2: #94a3b8;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+}
+
+/* NAV */
+.navbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 100;
+  gap: 16px;
+}
+.navbar-brand {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.navbar-links a {
+  color: var(--fg2);
+  text-decoration: none;
+  font-size: .85rem;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background .15s, color .15s;
+}
+.navbar-links a:hover, .navbar-links a.active {
+  background: #eff6ff;
+  color: var(--accent);
+}
+:root[data-theme="dark"] .navbar-links a:hover,
+:root[data-theme="dark"] .navbar-links a.active { background: #1e3a5f; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .navbar-links a:hover,
+  :root:not([data-theme="light"]) .navbar-links a.active { background: #1e3a5f; }
+}
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; font-size: .85rem; font-weight: 500; cursor: pointer; border: none; transition: opacity .15s; }
+.btn:hover { opacity: .85; }
+.btn-ghost { background: transparent; color: var(--fg2); border: 1px solid var(--border); }
+
+/* LAYOUT */
+.page { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
+.page-header { margin-bottom: 28px; }
+.page-title { font-size: 1.5rem; font-weight: 700; }
+.page-sub { color: var(--fg2); font-size: .9rem; margin-top: 4px; }
+
+/* STAT TILES */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; margin-bottom: 28px; }
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.tile-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--fg2); margin-bottom: 8px; }
+.tile-value { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.tile-sub { font-size: .78rem; color: var(--fg2); margin-top: 6px; }
+.tile.green .tile-value { color: var(--green); }
+.tile.red .tile-value { color: var(--red); }
+.tile.amber .tile-value { color: var(--amber); }
+.tile.blue .tile-value { color: var(--accent); }
+.tile.purple .tile-value { color: var(--accent2); }
+.tile.cyan .tile-value { color: var(--cyan); }
+
+/* CHARTS */
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+}
+.card-title { font-size: .95rem; font-weight: 600; margin-bottom: 18px; }
+
+/* BAR CHART */
+.bar-list { display: flex; flex-direction: column; gap: 10px; }
+.bar-row { display: flex; align-items: center; gap: 10px; }
+.bar-label { font-size: .82rem; color: var(--fg2); width: 90px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { flex: 1; background: var(--border); border-radius: 99px; height: 10px; overflow: hidden; min-width: 0; }
+.bar-fill { height: 100%; border-radius: 99px; transition: width .6s cubic-bezier(.4,0,.2,1); }
+.bar-count { font-size: .8rem; font-variant-numeric: tabular-nums; color: var(--fg2); width: 32px; text-align: right; flex-shrink: 0; }
+
+/* SPARKLINE */
+.spark-wrap { overflow-x: auto; }
+svg.spark { display: block; width: 100%; }
+
+/* EMPTY */
+.empty { text-align: center; color: var(--fg2); font-size: .88rem; padding: 28px 0; }
+
+/* LOADER */
+.loader { display: flex; justify-content: center; padding: 40px 0; }
+.spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar-brand" href="/admin">🛡️ EvacuAI</a>
+  <div class="navbar-links">
+    <a href="/admin">Dashboard</a>
+    <a href="/admin/students">Students</a>
+    <a href="/admin/drill">Drill Mode</a>
+    <a href="/admin/audit">Audit Log</a>
+    <a href="/admin/analytics" class="active">Analytics</a>
+    <a href="/profile">Profile</a>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">📊 Analytics</div>
+    <div class="page-sub">System-wide evacuation and safety overview</div>
+  </div>
+
+  <div id="loader" class="loader"><div class="spinner"></div></div>
+  <div id="main" hidden>
+
+    <!-- STAT TILES -->
+    <div class="tiles">
+      <div class="tile blue">
+        <div class="tile-label">Total Users</div>
+        <div class="tile-value" id="t-users">—</div>
+        <div class="tile-sub">registered students</div>
+      </div>
+      <div class="tile green">
+        <div class="tile-label">Marked Safe</div>
+        <div class="tile-value" id="t-safe">—</div>
+        <div class="tile-sub" id="t-safe-pct">of total</div>
+      </div>
+      <div class="tile red">
+        <div class="tile-label">Not Safe</div>
+        <div class="tile-value" id="t-unsafe">—</div>
+        <div class="tile-sub">not yet confirmed</div>
+      </div>
+      <div class="tile amber">
+        <div class="tile-label">SOS Alerts</div>
+        <div class="tile-value" id="t-sos">—</div>
+        <div class="tile-sub" id="t-sos-res">resolved</div>
+      </div>
+      <div class="tile purple">
+        <div class="tile-label">Drills Run</div>
+        <div class="tile-value" id="t-drills">—</div>
+        <div class="tile-sub" id="t-drills-done">completed</div>
+      </div>
+      <div class="tile cyan">
+        <div class="tile-label">Hazard Reports</div>
+        <div class="tile-value" id="t-reports">—</div>
+        <div class="tile-sub">total submitted</div>
+      </div>
+    </div>
+
+    <!-- CHARTS -->
+    <div class="charts">
+
+      <!-- Alerts by Type -->
+      <div class="card">
+        <div class="card-title">Alerts by Disaster Type</div>
+        <div id="chart-alert-type"><div class="empty">No data</div></div>
+      </div>
+
+      <!-- Reports per Day -->
+      <div class="card">
+        <div class="card-title">Hazard Reports – Last 14 Days</div>
+        <div class="spark-wrap" id="chart-reports-day"><div class="empty">No data</div></div>
+      </div>
+
+      <!-- Alerts per Day -->
+      <div class="card">
+        <div class="card-title">Alerts Sent – Last 14 Days</div>
+        <div class="spark-wrap" id="chart-alerts-day"><div class="empty">No data</div></div>
+      </div>
+
+      <!-- Top Reporters -->
+      <div class="card">
+        <div class="card-title">Top Hazard Reporters</div>
+        <div id="chart-reporters"><div class="empty">No data</div></div>
+      </div>
+
+    </div>
+  </div><!-- /main -->
+</div>
+
+<script>
+async function doLogout() {
+  await fetch('/api/logout', { method: 'POST' });
+  location.href = '/';
+}
+
+// ── PALETTE ──────────────────────────────────────────────────────────────────
+const COLORS = {
+  earthquake: '#d97706',
+  fire:       '#dc2626',
+  flood:      '#0891b2',
+  general:    '#2563eb',
+  drill:      '#7c3aed',
+};
+function barColor(key) {
+  return COLORS[key] || '#64748b';
+}
+
+// ── BAR CHART ─────────────────────────────────────────────────────────────────
+function renderBars(containerId, items, colorFn) {
+  const el = document.getElementById(containerId);
+  if (!items || !items.length) { el.innerHTML = '<div class="empty">No data yet</div>'; return; }
+  const max = Math.max(...items.map(i => i.count), 1);
+  const html = items.map(i => `
+    <div class="bar-row">
+      <span class="bar-label" title="${i.label}">${i.label}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${(i.count/max*100).toFixed(1)}%;background:${colorFn(i.label)}"></div>
+      </div>
+      <span class="bar-count">${i.count}</span>
+    </div>`).join('');
+  el.innerHTML = `<div class="bar-list">${html}</div>`;
+}
+
+// ── SPARKLINE BAR ─────────────────────────────────────────────────────────────
+function renderSparkBars(containerId, rows, color) {
+  const el = document.getElementById(containerId);
+  if (!rows || !rows.length) { el.innerHTML = '<div class="empty">No data yet</div>'; return; }
+  const max = Math.max(...rows.map(r => r.count), 1);
+  const W = 480, H = 80, PAD = 28, barW = Math.max(4, Math.floor((W - PAD) / rows.length) - 3);
+  const step = (W - PAD) / rows.length;
+  const rects = rows.map((r, i) => {
+    const bh = Math.max(2, Math.round((r.count / max) * (H - 20)));
+    const x = PAD / 2 + i * step + (step - barW) / 2;
+    const y = H - 16 - bh;
+    return `<rect x="${x.toFixed(1)}" y="${y}" width="${barW}" height="${bh}" rx="3" fill="${color}" opacity=".85"/>
+            <text x="${(x + barW/2).toFixed(1)}" y="${H - 2}" text-anchor="middle" font-size="9" fill="var(--fg2)">${r.date ? r.date.slice(5) : r.day?.slice(5) || ''}</text>
+            ${r.count > 0 ? `<text x="${(x + barW/2).toFixed(1)}" y="${y - 3}" text-anchor="middle" font-size="9" fill="var(--fg2)">${r.count}</text>` : ''}`;
+  }).join('');
+  el.innerHTML = `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${rects}</svg>`;
+}
+
+// ── LOAD DATA ─────────────────────────────────────────────────────────────────
+async function loadAnalytics() {
+  try {
+    const res = await fetch('/api/analytics');
+    if (!res.ok) throw new Error('fetch failed');
+    const d = await res.json();
+
+    // tiles
+    document.getElementById('t-users').textContent   = d.total_users ?? 0;
+    document.getElementById('t-safe').textContent    = d.safe_count ?? 0;
+    document.getElementById('t-unsafe').textContent  = d.unsafe_count ?? 0;
+    document.getElementById('t-sos').textContent     = d.sos_total ?? 0;
+    document.getElementById('t-drills').textContent  = d.drills_total ?? 0;
+
+    const totalReports = (d.reports_per_day || []).reduce((s, r) => s + r.count, 0);
+    document.getElementById('t-reports').textContent = totalReports;
+
+    const pct = d.total_users ? Math.round((d.safe_count / d.total_users) * 100) : 0;
+    document.getElementById('t-safe-pct').textContent = `${pct}% of total`;
+    document.getElementById('t-sos-res').textContent  = `${d.sos_resolved ?? 0} resolved`;
+    document.getElementById('t-drills-done').textContent = `${d.drills_done ?? 0} completed`;
+
+    // alerts by type
+    const alertTypes = Object.entries(d.alert_by_type || {})
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+    renderBars('chart-alert-type', alertTypes, k => barColor(k));
+
+    // reports per day
+    renderSparkBars('chart-reports-day', d.reports_per_day || [], '#dc2626');
+
+    // alerts per day
+    renderSparkBars('chart-alerts-day', d.alerts_per_day || [], '#2563eb');
+
+    // top reporters
+    const reporters = (d.top_reporters || []).map(r => ({ label: r.name, count: r.count }));
+    renderBars('chart-reporters', reporters, () => '#7c3aed');
+
+    document.getElementById('loader').hidden = true;
+    document.getElementById('main').hidden = false;
+
+  } catch (e) {
+    document.getElementById('loader').innerHTML = `<div class="empty" style="color:var(--red)">Failed to load analytics. Make sure the server is running.</div>`;
+  }
+}
+
+loadAnalytics();
+</script>
+</body>
+</html>

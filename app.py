@@ -1,8 +1,11 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from database import init_db, get_db, hp, gen_password
-import csv, io, base64
+import csv, io, base64, os, requests as http_requests
 from datetime import datetime, timedelta
 import openpyxl, io as _io
+
+SEMAPHORE_API_KEY = os.environ.get("SEMAPHORE_API_KEY", "")
+SEMAPHORE_SENDER  = os.environ.get("SEMAPHORE_SENDER", "EvacuAI")
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = "evacuai-secret-2024"
@@ -13,6 +16,14 @@ init_db()
 
 def uid(): return session.get("user")
 def now(): return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def audit(db, action, detail=""):
+    """Write one line to the audit log."""
+    if not uid(): return
+    db.execute(
+        "INSERT INTO audit_log (user_id,actor_name,action,detail,created_at) VALUES (?,?,?,?,?)",
+        (uid(), session.get("name","?"), action, detail, now())
+    )
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
 @app.route("/")
@@ -36,6 +47,21 @@ def admin_page():
 def students_page():
     if not uid() or session.get("role")!="admin": return redirect(url_for("index"))
     return render_template("students.html", name=session.get("name"))
+
+@app.route("/admin/drill")
+def drill_page():
+    if not uid() or session.get("role")!="admin": return redirect(url_for("index"))
+    return render_template("drill.html", name=session.get("name"))
+
+@app.route("/admin/audit")
+def audit_page():
+    if not uid() or session.get("role")!="admin": return redirect(url_for("index"))
+    return render_template("audit.html", name=session.get("name"))
+
+@app.route("/admin/analytics")
+def analytics_page():
+    if not uid() or session.get("role")!="admin": return redirect(url_for("index"))
+    return render_template("analytics.html", name=session.get("name"))
 
 @app.route("/profile")
 def profile_page():
@@ -118,6 +144,7 @@ def add_user():
         return jsonify({"error":"Student ID already exists."}),409
     db.execute("INSERT INTO users (name,student_id,password,role,must_change_pw) VALUES (?,?,?,?,1)",
                (name, sid, hp(pw), role))
+    audit(db, "ADD_USER", f"{name} ({sid}) role={role}")
     db.commit()
     return jsonify({"message":"Student account created.", "password":pw})
 
@@ -140,6 +167,7 @@ def upload_csv():
         db.execute("INSERT INTO users (name,student_id,password,role,must_change_pw) VALUES (?,?,?,?,1)",
                    (name, sid, hp(pw), role))
         added+=1
+    audit(db, "CSV_UPLOAD", f"Added {added}, skipped {skipped}")
     db.commit()
     return jsonify({"message":f"Added {added} accounts. Skipped {skipped} (duplicate or incomplete)."})
 
@@ -158,6 +186,7 @@ def update_user(user_id):
                    (name, role, hp(new_pw), user_id))
     else:
         db.execute("UPDATE users SET name=?,role=? WHERE id=?", (name, role, user_id))
+    audit(db, "EDIT_USER", f"id={user_id} name={name} role={role}")
     db.commit()
     return jsonify({"message":"User updated."})
 
@@ -166,9 +195,11 @@ def delete_user(user_id):
     if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
     if user_id==uid(): return jsonify({"error":"Cannot delete your own account."}),400
     db = get_db()
+    u  = db.execute("SELECT name,student_id FROM users WHERE id=?", (user_id,)).fetchone()
     db.execute("DELETE FROM users WHERE id=?", (user_id,))
     db.execute("DELETE FROM safety_status WHERE user_id=?", (user_id,))
     db.execute("DELETE FROM reports WHERE user_id=?", (user_id,))
+    if u: audit(db, "DELETE_USER", f"{u['name']} ({u['student_id']})")
     db.commit()
     return jsonify({"message":"User deleted."})
 
@@ -201,8 +232,13 @@ def post_alert():
         (kind, message, session.get("name","Unknown"), role, now(), uid(), status)
     )
     db.commit()
+    alert_id = cur.lastrowid
+    if role == "admin":
+        _broadcast_alert(db, kind, message)
+        audit(db, "BROADCAST_ALERT", f"type={kind} msg={message[:80]}")
+        db.commit()
     label = "Alert broadcast!" if role=="admin" else "Report submitted — waiting for admin approval."
-    return jsonify({"message":label,"id":cur.lastrowid,"status":status})
+    return jsonify({"message":label,"id":alert_id,"status":status})
 
 @app.route("/api/alerts/<int:aid>", methods=["PATCH"])
 def update_alert(aid):
@@ -214,6 +250,7 @@ def update_alert(aid):
     msg  = data.get("message", alert["message"]).strip()
     kind = data.get("type", alert["type"])
     db.execute("UPDATE alerts SET message=?,type=? WHERE id=?", (msg, kind, aid))
+    audit(db, "EDIT_ALERT", f"id={aid} type={kind}")
     db.commit()
     return jsonify({"message":"Alert updated."})
 
@@ -225,6 +262,8 @@ def delete_alert(aid):
     if not alert: return jsonify({"error":"Alert not found."}),404
     if session.get("role")=="admin" or alert["user_id"]==uid():
         db.execute("DELETE FROM alerts WHERE id=?", (aid,))
+        if session.get("role")=="admin":
+            audit(db, "DELETE_ALERT", f"id={aid} type={alert['type']}")
         db.commit()
         return jsonify({"message":"Alert deleted."})
     return jsonify({"error":"You can only delete your own alerts."}),403
@@ -233,7 +272,9 @@ def delete_alert(aid):
 def approve_alert(aid):
     if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
     db = get_db()
+    a  = db.execute("SELECT * FROM alerts WHERE id=?", (aid,)).fetchone()
     db.execute("UPDATE alerts SET status='approved' WHERE id=?", (aid,))
+    if a: audit(db, "APPROVE_ALERT", f"id={aid} from={a['sender']}")
     db.commit()
     return jsonify({"message":"Alert approved and now live."})
 
@@ -241,7 +282,9 @@ def approve_alert(aid):
 def decline_alert(aid):
     if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
     db = get_db()
+    a  = db.execute("SELECT * FROM alerts WHERE id=?", (aid,)).fetchone()
     db.execute("UPDATE alerts SET status='declined' WHERE id=?", (aid,))
+    if a: audit(db, "DECLINE_ALERT", f"id={aid} from={a['sender']}")
     db.commit()
     return jsonify({"message":"Alert declined."})
 
@@ -317,7 +360,9 @@ def delete_my_report(rid):
 def delete_report(rid):
     if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
     db = get_db()
+    r  = db.execute("SELECT location FROM reports WHERE id=?", (rid,)).fetchone()
     db.execute("DELETE FROM reports WHERE id=?", (rid,))
+    if r: audit(db, "DELETE_REPORT", f"id={rid} location={r['location']}")
     db.commit()
     return jsonify({"message":"Report deleted."})
 
@@ -336,6 +381,7 @@ def admin_mark_safe():
     user_id = request.get_json().get("user_id")
     db = get_db()
     db.execute("INSERT OR REPLACE INTO safety_status (user_id,is_safe,updated_at) VALUES (?,1,?)", (user_id,now()))
+    audit(db, "MARK_SAFE", f"user_id={user_id}")
     db.commit()
     return jsonify({"message":"Student marked as safe."})
 
@@ -344,6 +390,7 @@ def reset_safe():
     if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
     db = get_db()
     db.execute("UPDATE safety_status SET is_safe=0, updated_at=?", (now(),))
+    audit(db, "RESET_SAFETY", "All safety statuses reset")
     db.commit()
     return jsonify({"message":"All safety statuses reset."})
 
@@ -405,6 +452,7 @@ def respond_sos(sid):
         "UPDATE sos_alerts SET responded=1,responded_at=?,notification=? WHERE id=?",
         (now(),"A safety officer has been deployed and is on the way to your location. Please stay calm.",sid)
     )
+    audit(db, "RESPOND_SOS", f"sos_id={sid} student={sos['sender']}")
     db.commit()
     return jsonify({"message":"Student notified."})
 
@@ -423,6 +471,7 @@ def resolve_sos(sid):
         "INSERT OR REPLACE INTO safety_status (user_id,is_safe,updated_at) VALUES (?,1,?)",
         (sos["user_id"],now())
     )
+    audit(db, "RESOLVE_SOS", f"sos_id={sid} student={sos['sender']}")
     db.commit()
     return jsonify({"message":"Student marked as safe."})
 
@@ -460,6 +509,7 @@ def set_room_status():
         "ON CONFLICT(room_id) DO UPDATE SET status=?,set_by=?,updated_at=?",
         (room_id, floor, status, uid(), now(), status, uid(), now())
     )
+    audit(db, "SET_ROOM_STATUS", f"{room_id} → {status} (floor={floor})")
     db.commit()
     return jsonify({"message":"Room status updated.","room_id":room_id,"status":status})
 
@@ -469,6 +519,7 @@ def reset_room_status():
         return jsonify({"error":"Unauthorized"}),401
     db = get_db()
     db.execute("UPDATE room_status SET status='passable'")
+    audit(db, "RESET_ROOMS", "All rooms reset to passable")
     db.commit()
     return jsonify({"message":"All rooms reset to passable."})
 
@@ -511,6 +562,159 @@ def stop_evacuating():
     )
     db.commit()
     return jsonify({"message":"Evacuation stopped."})
+
+# ── Crowd Tracking ───────────────────────────────────────────────────────────
+@app.route("/api/crowd", methods=["GET"])
+def get_crowd():
+    if not uid(): return jsonify({"error":"Unauthorized"}),401
+    db   = get_db()
+    rows = db.execute(
+        "SELECT floor, COUNT(*) as count FROM evacuation_status WHERE is_evacuating=1 GROUP BY floor"
+    ).fetchall()
+    result = {"Ground": 0, "Second": 0, "Third": 0}
+    for r in rows:
+        if r["floor"] in result:
+            result[r["floor"]] = r["count"]
+    return jsonify(result)
+
+# ── Drill Mode ────────────────────────────────────────────────────────────────
+@app.route("/api/drill/status", methods=["GET"])
+def drill_status():
+    db  = get_db()
+    row = db.execute("SELECT * FROM drill_sessions WHERE is_active=1 ORDER BY started_at DESC LIMIT 1").fetchone()
+    if not row:
+        return jsonify({"active": False})
+    return jsonify({"active": True, "scenario": row["scenario"], "started_at": row["started_at"], "id": row["id"]})
+
+@app.route("/api/drill/start", methods=["POST"])
+def drill_start():
+    if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
+    db = get_db()
+    # only one active drill at a time
+    existing = db.execute("SELECT id FROM drill_sessions WHERE is_active=1").fetchone()
+    if existing: return jsonify({"error":"A drill is already active. End it first."}),409
+    data     = request.get_json() or {}
+    scenario = data.get("scenario","earthquake")
+    notes    = data.get("notes","").strip()
+    db.execute(
+        "INSERT INTO drill_sessions (started_by,started_at,is_active,scenario,notes) VALUES (?,?,1,?,?)",
+        (uid(), now(), scenario, notes)
+    )
+    # Reset safety + evacuation so drill starts clean
+    db.execute("UPDATE safety_status SET is_safe=0, updated_at=?", (now(),))
+    db.execute("UPDATE evacuation_status SET is_evacuating=0, updated_at=?", (now(),))
+    # Broadcast drill alert
+    _broadcast_alert(db, scenario, f"[DRILL] {scenario.upper()} DRILL in progress. This is a practice evacuation. Please follow all evacuation procedures.")
+    audit(db, "DRILL_START", f"scenario={scenario}")
+    db.commit()
+    return jsonify({"message": f"Drill started ({scenario}). Students will see a drill banner."})
+
+@app.route("/api/drill/end", methods=["POST"])
+def drill_end():
+    if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
+    db  = get_db()
+    row = db.execute("SELECT * FROM drill_sessions WHERE is_active=1 ORDER BY started_at DESC LIMIT 1").fetchone()
+    if not row: return jsonify({"error":"No active drill."}),404
+    db.execute("UPDATE drill_sessions SET is_active=0, ended_at=? WHERE id=?", (now(), row["id"]))
+    # Announce drill end
+    _broadcast_alert(db, "general", "[DRILL ENDED] The practice evacuation drill has concluded. Thank you for your participation. You may return to normal activities.")
+    audit(db, "DRILL_END", f"drill_id={row['id']} scenario={row['scenario']}")
+    db.commit()
+    return jsonify({"message":"Drill ended. Summary broadcasted to students."})
+
+@app.route("/api/drill/history", methods=["GET"])
+def drill_history():
+    if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
+    db   = get_db()
+    rows = db.execute(
+        "SELECT d.*, u.name as admin_name, "
+        "(SELECT COUNT(*) FROM safety_status WHERE is_safe=1) as safe_count "
+        "FROM drill_sessions d JOIN users u ON d.started_by=u.id "
+        "ORDER BY d.started_at DESC LIMIT 20"
+    ).fetchall()
+    result = []
+    for r in rows:
+        row = dict(r)
+        # compute duration
+        if row["ended_at"]:
+            try:
+                s = datetime.strptime(row["started_at"], "%Y-%m-%d %H:%M:%S")
+                e = datetime.strptime(row["ended_at"],   "%Y-%m-%d %H:%M:%S")
+                mins = int((e - s).total_seconds() // 60)
+                row["duration_min"] = mins
+            except Exception:
+                row["duration_min"] = None
+        else:
+            row["duration_min"] = None
+        result.append(row)
+    return jsonify(result)
+
+# ── Audit Log ─────────────────────────────────────────────────────────────────
+@app.route("/api/audit-log", methods=["GET"])
+def get_audit_log():
+    if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
+    limit = min(int(request.args.get("limit","100")), 500)
+    db    = get_db()
+    rows  = db.execute(
+        "SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+@app.route("/api/analytics", methods=["GET"])
+def get_analytics():
+    if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
+    db = get_db()
+
+    # Safety summary
+    total = db.execute("SELECT COUNT(*) FROM users WHERE role IN ('student','staff','teacher')").fetchone()[0]
+    safe  = db.execute("SELECT COUNT(*) FROM safety_status WHERE is_safe=1").fetchone()[0]
+
+    # SOS counts: total and resolved
+    sos_total    = db.execute("SELECT COUNT(*) FROM sos_alerts WHERE cancelled=0").fetchone()[0]
+    sos_resolved = db.execute("SELECT COUNT(*) FROM sos_alerts WHERE resolved=1").fetchone()[0]
+
+    # Alert counts by type (last 30 days)
+    alert_types = db.execute(
+        "SELECT type, COUNT(*) as cnt FROM alerts WHERE status='approved' GROUP BY type"
+    ).fetchall()
+    alert_by_type = {r["type"]: r["cnt"] for r in alert_types}
+
+    # Reports per day (last 7 days)
+    reports_per_day = db.execute(
+        "SELECT DATE(created_at) as day, COUNT(*) as cnt FROM reports "
+        "GROUP BY DATE(created_at) ORDER BY day DESC LIMIT 7"
+    ).fetchall()
+
+    # Alerts per day (last 7 days)
+    alerts_per_day = db.execute(
+        "SELECT DATE(created_at) as day, COUNT(*) as cnt FROM alerts WHERE status='approved' "
+        "GROUP BY DATE(created_at) ORDER BY day DESC LIMIT 7"
+    ).fetchall()
+
+    # Drill history summary
+    drills = db.execute("SELECT COUNT(*) FROM drill_sessions").fetchone()[0]
+    drills_done = db.execute("SELECT COUNT(*) FROM drill_sessions WHERE is_active=0").fetchone()[0]
+
+    # Top reporters
+    top_reporters = db.execute(
+        "SELECT u.name, COUNT(*) as cnt FROM reports r JOIN users u ON r.user_id=u.id "
+        "GROUP BY r.user_id ORDER BY cnt DESC LIMIT 5"
+    ).fetchall()
+
+    return jsonify({
+        "total_users":    total,
+        "safe_count":     safe,
+        "unsafe_count":   total - safe,
+        "sos_total":      sos_total,
+        "sos_resolved":   sos_resolved,
+        "alert_by_type":  alert_by_type,
+        "reports_per_day": [dict(r) for r in reports_per_day],
+        "alerts_per_day":  [dict(r) for r in alerts_per_day],
+        "drills_total":   drills,
+        "drills_done":    drills_done,
+        "top_reporters":  [dict(r) for r in top_reporters],
+    })
 
 # ── Schedule ──────────────────────────────────────────────────────────────────
 @app.route("/api/schedule/upload", methods=["POST"])
@@ -701,6 +905,114 @@ def add_schedule():
     )
     db.commit()
     return jsonify({"message": "Schedule entry added."})
+
+# ── Phone Number ──────────────────────────────────────────────────────────────
+@app.route("/api/profile/phone", methods=["POST"])
+def save_phone():
+    if not uid(): return jsonify({"error":"Unauthorized"}),401
+    data  = request.get_json()
+    phone = data.get("phone","").strip()
+    import re
+    clean = re.sub(r'\s+','', phone)
+    if clean and not re.match(r'^(\+639\d{9}|09\d{9})$', clean):
+        return jsonify({"error":"Enter a valid Philippine mobile number (09XXXXXXXXX)."}),400
+    db = get_db()
+    db.execute("UPDATE users SET phone=? WHERE id=?", (clean or None, uid()))
+    db.commit()
+    return jsonify({"message":"Phone number saved." if clean else "Phone number cleared."})
+
+@app.route("/api/profile/phone", methods=["GET"])
+def get_phone():
+    if not uid(): return jsonify({"error":"Unauthorized"}),401
+    db  = get_db()
+    row = db.execute("SELECT phone FROM users WHERE id=?", (uid(),)).fetchone()
+    return jsonify({"phone": row["phone"] if row else None})
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+@app.route("/api/notifications", methods=["GET"])
+def get_notifications():
+    if not uid(): return jsonify({"error":"Unauthorized"}),401
+    db   = get_db()
+    rows = db.execute(
+        "SELECT * FROM notifications WHERE user_id=? OR user_id IS NULL "
+        "ORDER BY created_at DESC LIMIT 50", (uid(),)
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/notifications/unread-count", methods=["GET"])
+def unread_count():
+    if not uid(): return jsonify({"error":"Unauthorized"}),401
+    db  = get_db()
+    cnt = db.execute(
+        "SELECT COUNT(*) FROM notifications WHERE (user_id=? OR user_id IS NULL) AND is_read=0",
+        (uid(),)
+    ).fetchone()[0]
+    return jsonify({"count": cnt})
+
+@app.route("/api/notifications/read-all", methods=["POST"])
+def read_all_notifications():
+    if not uid(): return jsonify({"error":"Unauthorized"}),401
+    db = get_db()
+    db.execute(
+        "UPDATE notifications SET is_read=1 WHERE user_id=? OR user_id IS NULL", (uid(),)
+    )
+    db.commit()
+    return jsonify({"message":"All notifications marked as read."})
+
+@app.route("/api/notifications/<int:nid>/read", methods=["POST"])
+def read_notification(nid):
+    if not uid(): return jsonify({"error":"Unauthorized"}),401
+    db = get_db()
+    db.execute("UPDATE notifications SET is_read=1 WHERE id=?", (nid,))
+    db.commit()
+    return jsonify({"message":"Marked as read."})
+
+# ── Semaphore SMS + notification broadcast helper ──────────────────────────────
+def _broadcast_alert(db, kind, message):
+    """Send SMS via Semaphore and create in-app notifications for all users."""
+    title_map = {
+        "earthquake": "🔴 EARTHQUAKE ALERT",
+        "fire":       "🔴 FIRE ALERT",
+        "flood":      "🔴 FLOOD ALERT",
+        "general":    "⚠️ EMERGENCY ALERT",
+    }
+    title = title_map.get(kind, "⚠️ EMERGENCY ALERT")
+    ts    = now()
+    db.execute(
+        "INSERT INTO notifications (user_id, title, body, type, created_at) VALUES (?,?,?,?,?)",
+        (None, title, message, kind, ts)
+    )
+    db.commit()
+    if not SEMAPHORE_API_KEY:
+        return
+    rows = db.execute("SELECT phone FROM users WHERE phone IS NOT NULL AND phone != ''").fetchall()
+    numbers = [r["phone"] for r in rows]
+    if not numbers:
+        return
+    sms_body = f"[EvacuAI] {title}\n{message}\nPlease follow evacuation procedures."
+    try:
+        http_requests.post(
+            "https://api.semaphore.co/api/v4/messages",
+            json={
+                "apikey":      SEMAPHORE_API_KEY,
+                "number":      ",".join(numbers),
+                "message":     sms_body,
+                "sendername":  SEMAPHORE_SENDER,
+            },
+            timeout=10
+        )
+    except Exception:
+        pass
+
+# ── Admin: view users without phone ──────────────────────────────────────────
+@app.route("/api/users/no-phone", methods=["GET"])
+def users_no_phone():
+    if not uid() or session.get("role")!="admin": return jsonify({"error":"Unauthorized"}),401
+    db   = get_db()
+    rows = db.execute(
+        "SELECT id,name,student_id,role FROM users WHERE (phone IS NULL OR phone='') AND role!='admin'"
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

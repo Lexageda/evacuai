@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvacuAI — Drill Mode</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.page-wrap { max-width:860px; margin:0 auto; padding:24px 20px; }
+.drill-scenario-btn { padding:10px 20px; border-radius:8px; border:1.5px solid var(--border); background:transparent; font-size:13px; font-weight:600; cursor:pointer; color:var(--text-sub); transition:all .15s; }
+.drill-scenario-btn.active { border-color:#1a3f7a; background:#e8eef8; color:#1a3f7a; }
+.drill-active-box { background:linear-gradient(135deg,#1a3f7a,#2a5fa8); color:#fff; border-radius:12px; padding:20px 24px; margin-bottom:20px; display:none; }
+.drill-active-box.show { display:block; }
+.drill-active-title { font-size:17px; font-weight:800; letter-spacing:.5px; margin-bottom:6px; }
+.drill-active-sub { font-size:13px; opacity:.85; margin-bottom:14px; }
+.drill-history-item { padding:12px 14px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; font-size:13px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.drill-badge-active { background:#e8eef8; color:#1a3f7a; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:700; }
+.drill-badge-done   { background:#e8f8ee; color:#1a7a3c; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:700; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <div class="navbar-brand">
+    <div class="navbar-logo">EA</div>
+    <div><div class="navbar-title">EvacuAI</div><div class="navbar-subtitle">Drill Mode</div></div>
+  </div>
+  <div class="navbar-links">
+    <a href="/admin">Dashboard</a>
+    <a href="/admin/students">Students</a>
+    <a href="/admin/drill" class="active">Drill Mode</a>
+    <a href="/admin/audit">Audit Log</a>
+    <a href="/admin/analytics">Analytics</a>
+    <a href="/profile">Profile</a>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()">Log out</button>
+  </div>
+</nav>
+
+<div class="page-wrap">
+
+  <!-- Active drill banner -->
+  <div class="drill-active-box" id="drill-active-box">
+    <div class="drill-active-title">🔵 EVACUATION DRILL IN PROGRESS</div>
+    <div class="drill-active-sub" id="drill-active-sub">—</div>
+    <button class="btn btn-danger" onclick="endDrill()">End Drill &amp; Send All-Clear</button>
+  </div>
+
+  <!-- Start form -->
+  <div class="card" id="drill-start-card">
+    <div class="card-title">Start Evacuation Drill</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+      Starting a drill will reset all safety statuses, broadcast a <strong>[DRILL]</strong> alert to all students, and activate the drill banner on their screens. End the drill to send the all-clear.
+    </p>
+    <div class="form-group">
+      <label style="margin-bottom:8px;display:block;">Drill scenario</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="drill-scenario-btn active" data-sc="earthquake" onclick="setScenario('earthquake')">🟡 Earthquake</button>
+        <button class="drill-scenario-btn" data-sc="flood"      onclick="setScenario('flood')">🔵 Flood</button>
+        <button class="drill-scenario-btn" data-sc="fire"       onclick="setScenario('fire')">🔴 Fire</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notes <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+      <input type="text" id="drill-notes" placeholder="e.g. Monthly fire drill — all floors">
+    </div>
+    <button class="btn btn-primary" onclick="startDrill()">Start Drill</button>
+  </div>
+
+  <!-- History -->
+  <div class="card" style="margin-top:18px;">
+    <div class="card-title">Drill History</div>
+    <div id="drill-history" style="max-height:400px;overflow-y:auto;">
+      <div class="empty" style="padding:20px;text-align:center;">Loading…</div>
+    </div>
+  </div>
+
+</div>
+<div id="toast"></div>
+<script>
+var scenario = 'earthquake';
+
+function toast(msg,isError){
+  var e=document.getElementById('toast');
+  e.textContent=msg; e.className='show'+(isError?' error':'');
+  setTimeout(function(){e.className=''},3000);
+}
+function doLogout(){fetch('/api/logout',{method:'POST'}).finally(function(){window.location.href='/logout'});}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function setScenario(sc){
+  scenario=sc;
+  document.querySelectorAll('.drill-scenario-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.sc===sc);
+  });
+}
+
+function startDrill(){
+  var notes=document.getElementById('drill-notes').value.trim();
+  fetch('/api/drill/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:scenario,notes:notes})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.error){toast(d.error,true);return;}
+      toast(d.message);
+      document.getElementById('drill-notes').value='';
+      checkStatus();
+      loadHistory();
+    });
+}
+
+function endDrill(){
+  if(!confirm('End the drill and send all-clear to students?'))return;
+  fetch('/api/drill/end',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+    if(d.error){toast(d.error,true);return;}
+    toast(d.message);
+    checkStatus();
+    loadHistory();
+  });
+}
+
+function checkStatus(){
+  fetch('/api/drill/status').then(function(r){return r.json();}).then(function(d){
+    var box  = document.getElementById('drill-active-box');
+    var card = document.getElementById('drill-start-card');
+    if(d.active){
+      box.classList.add('show');
+      card.style.display='none';
+      document.getElementById('drill-active-sub').textContent='Scenario: '+d.scenario.toUpperCase()+' | Started: '+d.started_at;
+    } else {
+      box.classList.remove('show');
+      card.style.display='block';
+    }
+  });
+}
+
+function loadHistory(){
+  fetch('/api/drill/history').then(function(r){return r.json();}).then(function(list){
+    var el=document.getElementById('drill-history');
+    if(!list.length){el.innerHTML='<div class="empty" style="padding:20px;text-align:center;">No drills recorded yet.</div>';return;}
+    el.innerHTML=list.map(function(d){
+      var dur=d.duration_min!==null?d.duration_min+' min':(d.is_active?'Active now':'—');
+      var badge=d.is_active?'<span class="drill-badge-active">ACTIVE</span>':'<span class="drill-badge-done">DONE</span>';
+      return '<div class="drill-history-item">'+
+        '<div>'+
+          '<div style="font-weight:700;">'+escHtml(d.scenario.toUpperCase())+' '+badge+'</div>'+
+          '<div style="color:var(--text-muted);margin-top:2px;">By '+escHtml(d.admin_name)+' · '+escHtml(d.started_at)+'</div>'+
+          (d.notes?'<div style="color:var(--text-sub);margin-top:2px;">'+escHtml(d.notes)+'</div>':'')+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;">'+
+          '<div style="font-size:11px;color:var(--text-muted);">Duration</div>'+
+          '<div style="font-weight:700;">'+escHtml(dur)+'</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  });
+}
+
+checkStatus();
+loadHistory();
+</script>
+</body>
+</html>

@@ -72,6 +72,10 @@
  .zoom-controls { position:absolute; top:8px; right:8px; z-index:10; display:flex; flex-direction:column; gap:4px; }
  .zoom-btn { width:28px; height:28px; border-radius:6px; border:1px solid #ccc; background:#fff; font-size:16px; cursor:pointer; line-height:1; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,0.15); }
  .zoom-btn:hover { background:#f0f0f0; }
+ .crowd-badge { font-size:10px; padding:1px 5px; border-radius:10px; margin-left:3px; font-weight:700; vertical-align:middle; }
+ .crowd-badge.low { background:#e8f5e9; color:#2e7d32; }
+ .crowd-badge.mod { background:#fff8e1; color:#f57f17; }
+ .crowd-badge.high { background:#ffebee; color:#c62828; }
 </style>
 </head>
 <body>
@@ -93,6 +97,31 @@
  <span id="banner-icon"></span>
  <span id="banner-text"></span>
 </div></div>
+
+<!-- Phone number missing banner -->
+<div id="phone-banner" style="display:none;max-width:1100px;margin:0 auto;padding:0 20px;">
+ <div style="background:#fff8e1;border:1.5px solid #f59e0b;border-radius:var(--radius);padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+  <span style="font-size:20px;">⚠️</span>
+  <span style="flex:1;font-size:13px;color:#7a5500;font-weight:600;">Add your phone number to receive SMS emergency alerts during disasters.</span>
+  <button onclick="openPhoneModal()" class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none;padding:7px 14px;border-radius:8px;font-weight:700;cursor:pointer;white-space:nowrap;">Add Now</button>
+ </div>
+</div>
+
+<!-- Add Phone modal (accessible from banner) -->
+<div class="modal-overlay" id="phone-modal-student">
+ <div class="modal-box">
+  <div style="font-size:32px;text-align:center;margin-bottom:8px;">📱</div>
+  <div style="font-size:20px;font-weight:800;color:var(--green-dark);margin-bottom:6px;text-align:center;">Add Your Phone Number</div>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;text-align:center;">You'll receive SMS alerts during emergencies even if you don't have internet.</p>
+  <div id="phone-modal-msg"></div>
+  <div class="form-group">
+   <label>Mobile Number</label>
+   <input type="tel" id="phone-modal-input" placeholder="09XXXXXXXXX" maxlength="13">
+  </div>
+  <button class="btn btn-primary btn-full" onclick="savePhoneFromModal()" style="margin-bottom:10px;">Save Number</button>
+  <button class="btn btn-outline btn-full" onclick="document.getElementById('phone-modal-student').classList.remove('show')" style="font-size:13px;">Cancel</button>
+ </div>
+</div>
 
 <div class="page-wrap">
  <div>
@@ -117,9 +146,9 @@
    <!-- Floor tabs + Report on Map -->
    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
     <div class="floor-tabs" style="margin-bottom:0">
-     <button class="floor-tab active" onclick="jumpToFloor('Ground')" id="tab-Ground">Ground</button>
-     <button class="floor-tab" onclick="jumpToFloor('Second')" id="tab-Second">2nd Floor</button>
-     <button class="floor-tab" onclick="jumpToFloor('Third')" id="tab-Third">3rd Floor</button>
+     <button class="floor-tab active" onclick="jumpToFloor('Ground')" id="tab-Ground">Ground <span class="crowd-badge" id="cbadge-Ground"></span></button>
+     <button class="floor-tab" onclick="jumpToFloor('Second')" id="tab-Second">2nd Floor <span class="crowd-badge" id="cbadge-Second"></span></button>
+     <button class="floor-tab" onclick="jumpToFloor('Third')" id="tab-Third">3rd Floor <span class="crowd-badge" id="cbadge-Third"></span></button>
     </div>
     <button onclick="toggleHazardMode()" id="btn-report-on-map" style="padding:6px 12px;border-radius:7px;border:1.5px solid var(--red);background:var(--red-pale);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">📍 Report on Map</button>
    </div>
@@ -373,7 +402,6 @@ function loadAllFloorsSVG(){
     if(loaded===floors.length){
      var html='';
      floors.forEach(function(f){
-      // No floor label — just the SVG block
       html+='<div class="map-floor-block" id="floor-block-'+f+'">';
       html+='<div id="floor-svg-'+f+'">'+svgData[f]+'</div>';
       html+='</div>';
@@ -634,7 +662,6 @@ function checkCurrentSchedule(){
  fetch('/api/schedule/current').then(function(r){return r.json();}).then(function(d){
   if(!d.found)return;
   currentSchedule=d;
-  // Only used by Go Evacuate popup — no banner shown
  }).catch(function(){});
 }
 
@@ -880,16 +907,63 @@ function doChangePw(){
   });
 }
 
+function checkPhoneBanner(){
+ fetch('/api/profile/phone')
+ .then(function(r){ return r.json(); })
+ .then(function(d){
+  if (!d.phone) document.getElementById('phone-banner').style.display='block';
+ }).catch(function(){});
+}
+
+function openPhoneModal(){
+ document.getElementById('phone-modal-student').classList.add('show');
+ document.getElementById('phone-modal-input').focus();
+}
+
+function savePhoneFromModal(){
+ var phone = document.getElementById('phone-modal-input').value.trim();
+ var msg   = document.getElementById('phone-modal-msg');
+ function showPh(t,ok){ msg.innerHTML='<div style="padding:9px 12px;border-radius:8px;margin-bottom:10px;background:'+(ok?'var(--green-pale)':'var(--red-pale)')+';color:'+(ok?'var(--green-dark)':'var(--red)')+';">'+t+'</div>'; }
+ if (!phone){ showPh('Please enter your mobile number.',false); return; }
+ fetch('/api/profile/phone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone})})
+ .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+ .then(function(res){
+  if (!res.ok){ showPh(res.d.error,false); return; }
+  showPh('Phone number saved! ✓',true);
+  document.getElementById('phone-banner').style.display='none';
+  setTimeout(function(){ document.getElementById('phone-modal-student').classList.remove('show'); }, 1000);
+ });
+}
+
+function fetchCrowdBadges(){
+ fetch('/api/crowd').then(function(r){return r.json();}).then(function(d){
+  var floors=['Ground','Second','Third'];
+  floors.forEach(function(f){
+   var count=d[f]||0;
+   var badge=document.getElementById('cbadge-'+f);
+   if(!badge)return;
+   if(count===0){badge.textContent='';badge.className='crowd-badge';return;}
+   var cls=count<=5?'low':count<=15?'mod':'high';
+   var icon=count<=5?'🟢':count<=15?'🟡':'🔴';
+   badge.textContent=icon+' '+count;
+   badge.className='crowd-badge '+cls;
+  });
+ }).catch(function(){});
+}
+
 window.addEventListener('load', function(){
  initPanMap();
  loadAllFloorsSVG();
  fetchAlerts();
  fetchReportsAndUpdateMap();
+ fetchCrowdBadges();
  loadMyReports();
  checkCurrentSchedule();
+ checkPhoneBanner();
  setInterval(function(){
   fetchAlerts();
   fetchReportsAndUpdateMap();
+  fetchCrowdBadges();
  }, 3000);
 });
 </script>
